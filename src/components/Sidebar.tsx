@@ -86,7 +86,7 @@ export function Sidebar({ activeView, onViewChange, onNewAnalysis }: SidebarProp
       {/* Brand */}
       <div className="px-6 mb-8">
         <div className="flex items-center gap-3">
-          <img src="/favicon.png" alt="Spej" className="w-10 h-10 rounded-lg object-contain" />
+          <img src="/favicon.svg" alt="Spej" className="w-10 h-10 rounded-lg object-contain" />
           <div>
             <h1 className="text-headline-sm text-primary leading-tight">Spej Claims</h1>
             <p className="text-label-md text-on-surface-variant opacity-70">Internal Review Portal</p>

@@ -6,84 +6,84 @@
 
 @layer base {
   :root {
-    /* Spej brand — teal #4ecdc4 / navy #1a2332 / off-white #f8f9fa — Material 3 surface scale */
+    /* Spej AI Office — dark theme (navy #1a2332 / teal #4ecdc4 / white) */
     /* Base surfaces */
-    --background: 210 17% 98%;           /* #f8f9fa off-white */
-    --foreground: 215 32% 15%;           /* #1a2332 navy */
-    --card: 0 0% 100%;                   /* #ffffff */
-    --card-foreground: 215 32% 15%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 215 32% 15%;
+    --background: 215 32% 15%;           /* #1a2332 navy */
+    --foreground: 210 20% 96%;           /* near-white */
+    --card: 215 28% 19%;                 /* lighter-navy panel */
+    --card-foreground: 210 20% 96%;
+    --popover: 215 28% 19%;
+    --popover-foreground: 210 20% 96%;
 
-    /* Brand */
-    --primary: 215 32% 15%;              /* #1a2332 Spej navy */
-    --primary-foreground: 0 0% 100%;
-    --secondary: 174 55% 55%;            /* #4ecdc4 Spej teal */
-    --secondary-foreground: 215 32% 15%;
+    /* Brand — teal is the primary action color (like the "Book a Discovery Call" CTA) */
+    --primary: 174 55% 55%;              /* #4ecdc4 Spej teal */
+    --primary-foreground: 215 32% 15%;   /* navy text on teal */
+    --secondary: 215 24% 24%;            /* muted navy surface */
+    --secondary-foreground: 210 20% 96%;
 
-    --muted: 200 24% 96%;                /* cool light gray */
-    --muted-foreground: 215 16% 40%;     /* #5a6473 */
+    --muted: 215 24% 22%;
+    --muted-foreground: 214 18% 72%;     /* light gray body text */
 
-    --accent: 178 40% 94%;               /* light teal tint */
-    --accent-foreground: 215 32% 15%;
+    --accent: 174 42% 30%;               /* deep teal (hover/active surface) */
+    --accent-foreground: 210 20% 96%;
 
-    --destructive: 0 75% 41%;            /* #ba1a1a */
+    --destructive: 0 72% 55%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 210 20% 88%;
-    --input: 210 20% 88%;
+    --border: 215 20% 28%;
+    --input: 215 20% 28%;
     --ring: 174 55% 55%;                 /* teal focus ring */
 
     --radius: 0.75rem;
 
-    /* MD3 surface tonal scale (teal-tinted neutral) */
-    --surface: 210 17% 98%;              /* #f8f9fa */
-    --surface-dim: 200 18% 90%;
-    --surface-bright: 0 0% 100%;
-    --surface-container-lowest: 0 0% 100%;       /* #ffffff */
-    --surface-container-low: 200 25% 97%;
-    --surface-container: 200 22% 95%;
-    --surface-container-high: 195 22% 93%;
-    --surface-container-highest: 190 22% 91%;
-    --on-surface: 215 32% 15%;
-    --on-surface-variant: 215 16% 40%;
-    --inverse-surface: 215 28% 20%;
-    --inverse-on-surface: 200 30% 96%;
+    /* MD3 surface tonal scale (dark, navy-based) */
+    --surface: 215 32% 15%;              /* #1a2332 */
+    --surface-dim: 216 34% 12%;
+    --surface-bright: 215 26% 22%;
+    --surface-container-lowest: 216 34% 12%;
+    --surface-container-low: 215 30% 17%;
+    --surface-container: 215 28% 19%;
+    --surface-container-high: 215 26% 22%;
+    --surface-container-highest: 215 24% 25%;
+    --on-surface: 210 20% 96%;
+    --on-surface-variant: 214 18% 72%;
+    --inverse-surface: 210 20% 92%;
+    --inverse-on-surface: 215 32% 15%;
 
     /* Outline */
-    --outline: 215 12% 50%;
-    --outline-variant: 210 20% 88%;
+    --outline: 214 12% 58%;
+    --outline-variant: 215 20% 30%;
 
     /* Tonal containers */
-    --primary-container: 215 30% 20%;            /* deep navy */
-    --on-primary-container: 174 40% 80%;         /* light teal on navy */
-    --primary-fixed: 178 45% 88%;                /* light teal */
-    --primary-fixed-dim: 176 40% 75%;
-    --secondary-container: 174 45% 88%;          /* teal tint */
-    --on-secondary-container: 175 79% 18%;       /* deep teal */
+    --primary-container: 174 42% 26%;            /* deep teal */
+    --on-primary-container: 174 55% 85%;         /* light teal text */
+    --primary-fixed: 174 45% 32%;
+    --primary-fixed-dim: 174 40% 24%;
+    --secondary-container: 215 26% 26%;
+    --on-secondary-container: 210 20% 92%;
 
-    /* Status colors (high-chroma icons, low-chroma tinted bg) */
-    --success: 142 71% 35%;
-    --success-foreground: 0 0% 100%;
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 100%;
-    --info: 199 89% 48%;
-    --info-foreground: 0 0% 100%;
+    /* Status colors (tuned for dark bg) */
+    --success: 142 58% 48%;
+    --success-foreground: 215 32% 15%;
+    --warning: 38 92% 58%;
+    --warning-foreground: 215 32% 15%;
+    --info: 199 80% 58%;
+    --info-foreground: 215 32% 15%;
 
     /* Agent chat */
-    --agent-bubble: 185 35% 95%;         /* teal tint */
-    --agent-bubble-foreground: 215 32% 15%;
-    --user-bubble: 215 32% 15%;          /* navy */
-    --user-bubble-foreground: 0 0% 100%;
+    --agent-bubble: 215 26% 22%;         /* dark panel */
+    --agent-bubble-foreground: 210 20% 96%;
+    --user-bubble: 174 55% 55%;          /* teal */
+    --user-bubble-foreground: 215 32% 15%;
 
     /* Sidebar tokens */
-    --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 215 32% 15%;
-    --sidebar-primary: 215 32% 15%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 178 45% 92%;       /* teal tint (active nav) */
-    --sidebar-accent-foreground: 175 79% 22%;
-    --sidebar-border: 210 20% 88%;
+    --sidebar-background: 216 34% 13%;   /* slightly darker than content */
+    --sidebar-foreground: 210 20% 96%;
+    --sidebar-primary: 174 55% 55%;      /* teal */
+    --sidebar-primary-foreground: 215 32% 15%;
+    --sidebar-accent: 174 42% 28%;       /* teal-ish active nav */
+    --sidebar-accent-foreground: 174 55% 85%;
+    --sidebar-border: 215 20% 26%;
     --sidebar-ring: 174 55% 55%;
   }
 }
