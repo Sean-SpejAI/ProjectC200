@@ -81,7 +81,7 @@ export default function ResetPassword() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <img src="/logo.png" alt="Spej" className="h-16 w-auto mx-auto mb-4" />
-          <h1 className="text-headline-md text-primary">Spej Demand Packet Review Portal</h1>
+          <h1 className="text-headline-md text-primary">Project C200 Demo Portal</h1>
           <p className="text-body-md text-on-surface-variant mt-1">Create a new password</p>
         </div>
         <Card className="p-6 bg-surface-container-lowest border-outline-variant shadow-elevation-1 rounded-2xl">

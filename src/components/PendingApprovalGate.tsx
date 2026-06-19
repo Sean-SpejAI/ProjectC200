@@ -43,7 +43,7 @@ export function PendingApprovalGate() {
             <h1 className="text-headline-md text-primary">Waiting for admin approval</h1>
             <p className="text-body-md text-on-surface-variant">
               Your account ({user?.email}) is registered, but an administrator must grant you access before
-              you can use the Spej Demand Packet Review Portal. You'll be notified once that happens.
+              you can use the Project C200 Demo Portal. You'll be notified once that happens.
             </p>
           </div>
           <div className="bg-surface-container-low border border-outline-variant rounded-xl p-4 text-left">

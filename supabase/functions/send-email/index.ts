@@ -25,10 +25,10 @@ import { scannerShortCircuit } from "../_shared/scanner-guard.ts";
 
 // Sender uses the info.spej.dev subdomain (verified in Resend). Apex spej.dev
 // is NOT verified — using it returns 403 "domain not verified" from Resend.
-const FROM_ADDRESS = "Spej Demand Packet Review Portal <noreply@info.spej.dev>";
+const FROM_ADDRESS = "Project C200 Demo Portal <noreply@info.spej.dev>";
 const LOGO_URL = "https://ncp.spej.dev/logo.png";
 const COMPANY_NAME = "Spej";
-const PRODUCT_NAME = "Spej Demand Packet Review Portal";
+const PRODUCT_NAME = "Project C200 Demo Portal";
 // Pulled from src/index.css design tokens — keep email branding in sync if
 // those primary/secondary HSL values change.
 const COLOR_NAVY = "#000b21";
@@ -135,7 +135,7 @@ const COPY: Record<EmailActionType, { subject: string; heading: string; intro: s
     subject: "Confirm your email",
     heading: "Confirm your email",
     intro:
-      "Welcome to the Spej Demand Packet Review Portal. To finish setting up your account, please confirm this email address.",
+      "Welcome to the Project C200 Demo Portal. To finish setting up your account, please confirm this email address.",
     cta: "Confirm email",
     outro:
       "If you didn't create an account, you can safely ignore this message.",
@@ -144,7 +144,7 @@ const COPY: Record<EmailActionType, { subject: string; heading: string; intro: s
     subject: "Reset your password",
     heading: "Reset your password",
     intro:
-      "We received a request to reset the password on your Spej Demand Packet Review Portal account. Click the button below to choose a new password.",
+      "We received a request to reset the password on your Project C200 Demo Portal account. Click the button below to choose a new password.",
     cta: "Reset password",
     outro:
       "If you didn't request a password reset, you can safely ignore this message — your password will stay the same.",
@@ -153,7 +153,7 @@ const COPY: Record<EmailActionType, { subject: string; heading: string; intro: s
     subject: `You've been invited to ${PRODUCT_NAME}`,
     heading: "You've been invited",
     intro:
-      "An administrator has invited you to the Spej Demand Packet Review Portal. Click the button below to accept and create your password.",
+      "An administrator has invited you to the Project C200 Demo Portal. Click the button below to accept and create your password.",
     cta: "Accept invitation",
     outro: "If you weren't expecting this invitation, you can safely ignore it.",
   },
@@ -161,7 +161,7 @@ const COPY: Record<EmailActionType, { subject: string; heading: string; intro: s
     subject: "Sign in to the Spej Review Portal",
     heading: "Sign in",
     intro:
-      "Click the button below to sign in to the Spej Demand Packet Review Portal.",
+      "Click the button below to sign in to the Project C200 Demo Portal.",
     cta: "Sign in",
     outro:
       "If you didn't request a sign-in link, you can safely ignore this message.",
@@ -185,7 +185,7 @@ const COPY: Record<EmailActionType, { subject: string; heading: string; intro: s
     subject: "Confirm your new email address",
     heading: "Confirm new email",
     intro:
-      "Please confirm that this is your new email address for the Spej Demand Packet Review Portal.",
+      "Please confirm that this is your new email address for the Project C200 Demo Portal.",
     cta: "Confirm new email",
     outro: "If you didn't request this change, contact your administrator.",
   },

@@ -53,7 +53,7 @@ export function BackupCodesDisplay({
 
   const downloadTxt = () => {
     if (!codes) return;
-    const header = "Spej Demand Packet Review Portal — backup codes\nGenerated " + new Date().toISOString() + "\n\n";
+    const header = "Project C200 Demo Portal — backup codes\nGenerated " + new Date().toISOString() + "\n\n";
     const body = codes.join("\n") + "\n";
     const blob = new Blob([header + body], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
