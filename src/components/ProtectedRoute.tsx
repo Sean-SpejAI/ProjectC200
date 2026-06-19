@@ -13,6 +13,11 @@ interface ProtectedRouteProps {
   children: React.ReactNode;
 }
 
+// Demo environment: mandatory two-factor auth is disabled so the hard-coded
+// demo login goes straight to the app. Set this to `true` to restore the
+// enforced MFA enrollment + step-up verification gates.
+const MFA_ENFORCED = false;
+
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { user, loading: authLoading } = useAuth();
   const { loading: mfaLoading, needsEnroll, needsVerify, refresh } = useMFAStatus();
@@ -32,7 +37,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   }, [user, authLoading, navigate]);
 
   useEffect(() => {
-    if (needsEnroll) setEnrollGateLocked(true);
+    if (MFA_ENFORCED && needsEnroll) setEnrollGateLocked(true);
   }, [needsEnroll]);
 
   // Reset the lock when the user signs out (so a fresh sign-in starts fresh).
@@ -45,7 +50,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   // briefly flips useMFAStatus into loading. If we unmount the gate here,
   // MFAEnrollGate loses its stage state and the user lands back on the
   // "2FA is enabled" view instead of seeing their backup codes.
-  if (enrollGateLocked && user) {
+  if (MFA_ENFORCED && enrollGateLocked && user) {
     return (
       <MFAEnrollGate
         onComplete={() => {
@@ -56,7 +61,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     );
   }
 
-  if (authLoading || mfaLoading) {
+  if (authLoading || (MFA_ENFORCED && mfaLoading)) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
@@ -71,7 +76,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     return null;
   }
 
-  if (needsVerify) {
+  if (MFA_ENFORCED && needsVerify) {
     return (
       <MFAVerify
         onSuccess={refresh}
