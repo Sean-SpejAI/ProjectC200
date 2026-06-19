@@ -1,0 +1,190 @@
+# ZAP scan rules + scope exclusions.
+#
+# Format (tab-separated):
+#   RULE_ID	ACTION	URL_REGEX	NOTE
+# Actions: IGNORE, WARN, FAIL
+#
+# Apply order: a more-specific URL_REGEX wins. The ACTION on a matched line
+# overrides the scan's default severity for that rule on URLs matching the
+# regex. Use IGNORE only with a comment line above explaining why.
+#
+# Used by both zap-baseline.yml (passive) and zap-scan.yml (active +
+# api-scan). The baseline action passes this via `rules_file_name` and the
+# full/api actions pass it via `cmd_options: -c .zap/rules.tsv`.
+
+# -- Scope exclusions (Layer 2 from the plan) ---------------------------
+# Prevent ZAP from spidering or attacking these — RLS / Supabase platform
+# already enforces auth, but exercising them with attack payloads is wasteful
+# and noisy. Also keeps `send-email` (HMAC webhook) out of API scan since it
+# has no JSON request body shape worth exercising.
+0	IGNORE	.*/auth/v1/admin/.*	Supabase admin API would mutate real users
+0	IGNORE	.*/storage/v1/.*	Storage API — mutating real objects via legitimate JWT
+0	IGNORE	.*/rest/v1/.*	PostgREST — RLS protects rows; iteration is noise
+0	IGNORE	.*/functions/v1/send-email.*	Auth webhook only, HMAC-signed by Supabase
+
+# -- False positives ----------------------------------------------------
+# (Add entries here as `.zap/rules.tsv` is exercised against Dev for the
+# first time. Each IGNORE must be preceded by a comment.)
+
+# Proxy Disclosure (40025) — Vercel's CDN exposes `Server: Vercel` and
+# the X-Vercel-* family of headers on every response. These cannot be
+# stripped without a Vercel Enterprise plan. Accepting the fingerprint
+# disclosure on ncp.spej.dev and *.vercel.app preview URLs until/unless
+# we upgrade. The underlying mitigations the rule recommends (block
+# TRACE/TRACK, custom error pages) are already handled by Vercel's edge.
+40025	IGNORE	https?://(ncp\.spej\.dev|.*\.vercel\.app).*	Vercel CDN platform fingerprint
+
+# Cross-Domain Misconfiguration (10098) on /assets/* — the wildcard
+# `Access-Control-Allow-Origin: *` on bundled JS/CSS is intentional.
+# Those files are signed-by-content (SRI integrity hashes via
+# vite-plugin-sri3), so the cross-origin readability is safe — the
+# browser verifies their integrity against the hash in the parent
+# index.html before executing. HTML/dynamic paths are scoped to a
+# specific origin via vercel.json.
+10098	IGNORE	https?://(ncp\.spej\.dev|.*\.vercel\.app)/assets/.*	Intentional wildcard ACAO on SRI-verified bundles
+
+# CORS Misconfiguration (40040) on /assets/* — same root cause as 10098
+# above. Different ZAP rule, same intentional behavior.
+40040	IGNORE	https?://(ncp\.spej\.dev|.*\.vercel\.app)/assets/.*	Intentional wildcard ACAO on SRI-verified bundles
+
+# Sub Resource Integrity (90003) on the Material Symbols CSS link in
+# index.html — Google Fonts CSS content varies by User-Agent
+# (modern/legacy/woff2/woff), so a static SRI hash is not stable. The
+# bundled Vite assets (JS + CSS that we control) DO have integrity
+# attributes. To fully clear this we'd need to self-host the Material
+# Symbols font, which is tracked as a follow-up. ZAP attaches this
+# alert to the parent URL, not the link itself, so the regex matches
+# the page URLs.
+90003	IGNORE	https?://(ncp\.spej\.dev|.*\.vercel\.app)(/|/sitemap\.xml)?$	Google Fonts <link> — UA-dependent CSS, no stable hash
+
+# CSP: style-src 'unsafe-inline' (10055) — Tailwind CSS and Radix UI
+# inject inline styles at runtime for theming, dropdowns, dialogs, etc.
+# Removing 'unsafe-inline' from style-src would break large parts of
+# the SPA. ZAP flags both the wildcard directive and the unsafe-inline
+# directive under rule 10055; accepting both as long as the underlying
+# component libraries require this pattern. To eliminate properly:
+# move to CSS-in-JS with nonces/hashes (significant refactor).
+10055	IGNORE	https?://(ncp\.spej\.dev|.*\.vercel\.app).*	style-src 'unsafe-inline' required by Tailwind + Radix
+
+# Cacheable / Non-Cacheable Content (10049) — ZAP fires this plugin in
+# three variants depending on the cache hints in the response:
+#   "Storable and Cacheable Content"  → /assets/* (max-age=31536000, immutable)
+#   "Storable but Non-Cacheable"      → SPA shell (max-age=0)
+#   "Non-Storable Content"            → SPA shell (no-store) + auth-required endpoints
+# All three are intentional and informational, not vulnerabilities:
+#   - /assets/* are content-hashed SRI-signed bundles, so immutable caching
+#     is correct (filename changes when content changes; stale caches are
+#     impossible).
+#   - The SPA shell uses no-store + max-age=0 so auth bundles aren't cached.
+# Widened from the original /assets/* scope to all paths because ZAP's
+# Non-Storable variant fires on the shell, which the /assets/* regex
+# doesn't match.
+10049	IGNORE	https?://(ncp\.spej\.dev|.*\.vercel\.app).*	Cache policy: immutable on /assets/*, no-store on shell — both intentional
+
+# Retrieved from Cache (10050) — `Age:` response header confirms a CDN
+# cache hit on Vercel's edge. Desired behavior for static delivery; the
+# only paths that can be cached at the edge are the immutable /assets/*
+# bundles (HTML shell is no-store). Not a vulnerability.
+10050	IGNORE	https?://(ncp\.spej\.dev|.*\.vercel\.app).*	Vercel edge CDN cache hit — desired for /assets/* immutable bundles
+
+# Modern Web Application (10109) — descriptive note that the target is a
+# JS-heavy SPA. We ARE a React SPA with client-side routing; this is the
+# documented architecture. Not a finding, just ZAP characterizing the app.
+10109	IGNORE	https?://(ncp\.spej\.dev|.*\.vercel\.app).*	Target is a React SPA by design; ZAP note is descriptive
+
+# Timestamp Disclosure - Unix (10096) on /assets/*.js — investigated
+# 2026-06-05 by grepping the bundle for 10-digit Unix-epoch-range
+# numbers. All matches were SHA-1/256/512 round constants (e.g.
+# 1859775393, 1732584193 from the FIPS 180-4 hash functions in
+# crypto-js) and INT32 boundary constants (2147483647 / -2147483648
+# from the Node Buffer polyfill's size validation). These are
+# cryptographic primitives and integer limits, not timestamps; ZAP's
+# regex pattern is a false positive against minified JS containing
+# crypto code.
+10096	IGNORE	https?://(ncp\.spej\.dev|.*\.vercel\.app)/assets/.*\.js	SHA round constants + INT32 boundaries, not real timestamps
+
+# Information Disclosure - Suspicious Comments (10027) on /assets/*.js
+# — investigated 2026-06-05 by grepping the bundle for ZAP's keyword
+# list (TODO/FIXME/XXX/HACK/BUG/DEBUG). All matches were code, not
+# comments: `oa.debug` property accesses in @supabase/gotrue-js (auth
+# log gating), the literal string "Bug : uncompressed data size
+# mismatch" inside JSZip's error path, and `debug` as a style key in
+# our sonner toast variants. None of these are leaked developer
+# annotations — they're functional code and runtime error messages.
+10027	IGNORE	https?://(ncp\.spej\.dev|.*\.vercel\.app)/assets/.*\.js	Supabase/JSZip identifiers + error strings, not comments
+
+# -- API scan findings on /functions/v1/* (Supabase Edge Functions) ---
+#
+# These suppress alerts that fire during the ZAP API scan against our
+# Edge Functions on *.supabase.co. Each entry has a comment citing the
+# investigation that justified the suppression. The URL_REGEX targets
+# the Supabase project domain so these IGNOREs don't leak into the
+# full scan against our SPA at ncp.spej.dev.
+
+# Cookie with SameSite Attribute None (10054), Loosely Scoped Cookie
+# (90033), Session Management Response Identified (10112), Timestamp
+# Disclosure on cookie (10096) — investigated 2026-06-05 by inspecting
+# the ZAP evidence. All four fire on the `__cf_bm` Cloudflare bot-
+# management cookie (Domain=supabase.co, SameSite=None, value contains
+# a Unix timestamp). Supabase routes all traffic through Cloudflare;
+# we don't control this cookie's attributes. Not our cookie, not our
+# code, not changeable from our side.
+10054	IGNORE	https?://.*\.supabase\.co/functions/v1/.*	Cloudflare __cf_bm cookie (Supabase platform behavior)
+90033	IGNORE	https?://.*\.supabase\.co/functions/v1/.*	Cloudflare __cf_bm cookie scoped to supabase.co
+10112	IGNORE	https?://.*\.supabase\.co/functions/v1/.*	Cloudflare __cf_bm cookie surfaced as session token
+
+# Session Management Response Identified (10112) on Vercel preview URLs
+# — fires on the `_vercel_jwt` cookie set by Vercel when the baseline
+# workflow's replacer.conf injects `x-vercel-set-bypass-cookie: true`
+# (so the deployment-protection bypass persists across the spider/scan
+# instead of needing the header on every request). Not our cookie;
+# required for the scan to function correctly against protected
+# preview deployments. See .github/workflows/zap-baseline.yml.
+10112	IGNORE	https?://.*\.vercel\.app.*	Vercel _vercel_jwt cookie set by x-vercel-set-bypass-cookie for the scan
+10096	IGNORE	https?://.*\.supabase\.co/functions/v1/.*	Cloudflare __cf_bm cookie value contains a timestamp
+
+# Cross-Domain Misconfiguration (10098) on /functions/v1/* — Edge
+# Functions return `Access-Control-Allow-Origin: *` in corsHeaders
+# because the SPA runs from multiple deploy URLs (ncp.spej.dev for
+# prod, *.vercel.app for previews, dev). Every endpoint requires an
+# `Authorization: Bearer <JWT>` header and RLS gates the actual data
+# at the database layer, so cross-origin readability of a 401/200
+# response doesn't leak anything an attacker couldn't get by making
+# the request directly. Tightening to a specific allowlist would
+# break preview deployments and provide no additional protection.
+10098	IGNORE	https?://.*\.supabase\.co/functions/v1/.*	Wildcard CORS gated by JWT auth + RLS — explicit accept-risk
+
+# Non-Storable Content (10049) on /functions/v1/* — ZAP flags the
+# response as non-storable because the request carried an
+# Authorization header. That's the correct behavior: authenticated
+# responses MUST NOT be cached by intermediaries. The note is
+# descriptive, not a vulnerability.
+10049	IGNORE	https?://.*\.supabase\.co/functions/v1/.*	Auth-required endpoints are correctly non-cacheable
+
+# User Agent Fuzzer (10104) on /functions/v1/* — informational note
+# that ZAP fuzzed the User-Agent header to check for UA-based
+# response divergence. No divergence found that indicates a
+# vulnerability; the responses are gated by JWT, not UA. Not a
+# finding.
+10104	IGNORE	https?://.*\.supabase\.co/functions/v1/.*	UA fuzzer informational — auth/RLS doesn't depend on UA
+
+# Unexpected Content-Type was returned (100001) on /functions/v1/* —
+# ZAP expected JSON (per the OpenAPI spec) but got text/html in 53
+# instances. Investigated 2026-06-05: this happens when ZAP sends
+# OPTIONS / GET / malformed POSTs to functions that expect specific
+# auth + JSON bodies; the unauthenticated/unrouted path falls back
+# to Supabase's gateway HTML error page. Not data we control; the
+# functions themselves return JSON on the documented happy path.
+100001	IGNORE	https?://.*\.supabase\.co/functions/v1/.*	HTML error pages from gateway when fuzzer hits unauth/wrong paths
+
+# Server Error 5xx (100000) on /functions/v1/admin-regenerate-backup-codes
+# and similar — investigated 2026-06-05: every flagged instance was
+# from ZAP's fuzzer sending malformed requests like
+# `?class.module.classLoader.DefaultAssertionStatus=nonsense` (a
+# Spring4Shell probe). Our Edge Functions throw an unhandled error
+# on garbage input rather than returning 4xx because they expect a
+# specific POST body shape. The error is contained to the function
+# instance; nothing is exposed. Defense-in-depth follow-up would be
+# tighter input validation that returns 400 instead of 500, but the
+# functional behavior is correct.
+100000	IGNORE	https?://.*\.supabase\.co/functions/v1/.*	Edge Function 500s on fuzzer-malformed input — no data exposure

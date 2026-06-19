@@ -1,0 +1,69 @@
+# Nuclei findings allowlist. Add entries here ONLY in response to real
+# findings that have been triaged as false-positive or accepted-risk —
+# don't preemptively populate. Each ignore entry should have a `#` comment
+# explaining why it's safe to suppress.
+#
+# Format (see .nuclei/ignore-filter.mjs for the parser):
+#
+#   template_ids:
+#     - http-missing-security-headers   # CSP enforced separately, see vercel.json
+#
+#   tags:
+#     - tech                            # informational tech-stack disclosures only
+#
+#   match_url_patterns:
+#     - "^https?://.*\\.vercel\\.app/_next/"   # build-fingerprinted assets
+
+template_ids:
+  # Vercel's bot mitigation challenges Nuclei's requests with an
+  # HTTP 403 "Vercel Security Checkpoint" page (X-Vercel-Mitigated:
+  # challenge). That challenge HTML legitimately doesn't carry our
+  # app's security headers because it's Vercel's own DDoS protection,
+  # not our SPA. So the template fires on every header it checks
+  # (~10 matchers) against the challenge response.
+  #
+  # Verified 2026-06-05 by inspecting the raw `response` field on the
+  # finding in run 27027918495 — status 403, X-Vercel-Mitigated:
+  # challenge. Direct curl from outside Vercel's bot heuristic returns
+  # all 10 standard security headers correctly (HSTS, CSP, X-Frame,
+  # X-Content-Type-Options, Referrer-Policy, Permissions-Policy, COOP,
+  # COEP, CORP, X-Permitted-Cross-Domain-Policies). The headers ARE
+  # set; the scanner just can't reach our real response.
+  #
+  # ZAP doesn't trip the challenge (its evidence in the report shows
+  # our real CSP string), so the ZAP scan validates the real headers.
+  # Long-term fix would be a Vercel firewall rule to bypass challenge
+  # for the scanner identity (requires Pro tier).
+  - http-missing-security-headers
+
+  # Both TLS 1.2 and 1.3 are advertised by Vercel's edge. TLS 1.2 is
+  # still PCI/NIST-compliant in 2026 (deprecation timelines target TLS
+  # 1.0/1.1, not 1.2). Vercel does not permit customer-side TLS version
+  # restriction without an Enterprise plan. Discovery-level finding.
+  - tls-version
+
+  # Public field in every TLS handshake — the certificate issuer is
+  # visible to any client that connects. Not a finding.
+  - ssl-issuer
+
+  # Public Subject Alternative Names from the certificate — visible to
+  # any TLS client during the handshake. Not a finding.
+  - ssl-dns-names
+
+  # CAA DNS record IS configured as defense-in-depth (restricts which
+  # CAs can issue certs for the domain). This template detects its
+  # presence; we want it present. Discovery, not a vulnerability.
+  - caa-fingerprint
+
+  # CNAME to Vercel is the documented hosting model. `Server: Vercel`
+  # header already exposes this fact on every response; the CNAME chain
+  # adds nothing new. Public information.
+  - dns-saas-service-detection
+
+  # `public/robots.txt` is intentional — permits standard search
+  # crawlers (Google/Bing/Twitter/Facebook). Contents reviewed: no
+  # sensitive paths disclosed. Template just detects presence.
+  - robots-txt-endpoint
+
+tags: []
+match_url_patterns: []

@@ -1,0 +1,8 @@
+[
+  {"path":"/templates/cves/2024/CVE-2024-1234.yaml","id":"CVE-2024-1234","name":"Acme CMS RCE","severity":"critical","tags":"cve,cve2024,rce"},
+  {"path":"/templates/cves/2023/CVE-2023-9999.yaml","id":"CVE-2023-9999","name":"Old Widget Auth Bypass","severity":"high","tags":"cve,cve2023,auth"},
+  {"path":"/templates/exposures/files/git-config.yaml","id":"git-config-exposure","name":".git/config exposure","severity":"medium","tags":"exposure,files,git"},
+  {"path":"/templates/exposures/files/env-file.yaml","id":"env-file-exposure","name":".env file exposure","severity":"high","tags":"exposure,files,env"},
+  {"path":"/templates/misconfiguration/http-options.yaml","id":"http-options","name":"HTTP OPTIONS method allowed","severity":"info","tags":"misc"},
+  {"path":"/templates/misconfiguration/security-headers.yaml","id":"missing-security-headers","name":"Missing Security Headers","severity":"medium","tags":"misconfig,headers"}
+]

@@ -1,0 +1,334 @@
+# Minimal OpenAPI spec for ZAP API scanning of our Edge Functions.
+#
+# This file is NOT a contract — the React app calls these via supabase-js,
+# not via this spec. It exists solely so `zaproxy/action-api-scan` can
+# enumerate endpoints and fire active-attack payloads at each.
+#
+# CODEOWNERS enforces that this file is reviewed when supabase/functions/**
+# changes. If you add or rename a function, update this file in the same PR.
+#
+# `x-zap-skip: true` markers indicate functions that the api-scan workflow
+# should exclude (handled by .zap/rules.tsv URL-regex excludes — kept here
+# as inline documentation of which endpoints we intentionally skip).
+
+openapi: 3.0.3
+
+info:
+  title: Nodak Claims Analyzer — Edge Functions
+  version: "1.0.0"
+  description: |
+    OpenAPI surface for ZAP API scanning. The {ref} server variable is
+    overridden per scan run (dev/stage/prod) by the workflow.
+
+servers:
+  - url: https://{ref}.supabase.co/functions/v1
+    variables:
+      ref:
+        default: evpmuoxfrnmustokkaqg
+        description: Supabase project ref for the env under scan.
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Empty:
+      type: object
+    SyncRequest:
+      type: object
+      properties:
+        run_type:
+          type: string
+          enum: [one_time, daily_diff, manual_reload]
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+    ReloadRequest:
+      type: object
+      properties:
+        claimId:
+          type: string
+          format: uuid
+        claimNumber:
+          type: string
+    FetchDocRequest:
+      type: object
+      required: [documentId, imageright_document_id, claimId]
+      properties:
+        documentId:
+          type: string
+          format: uuid
+        imageright_document_id:
+          type: integer
+        claimId:
+          type: string
+          format: uuid
+        documentType:
+          type: string
+        fileName:
+          type: string
+    AnalyzeRequest:
+      type: object
+      required: [documentId]
+      properties:
+        documentId:
+          type: string
+          format: uuid
+        async:
+          type: boolean
+    SynthesizeRequest:
+      type: object
+      required: [claimId]
+      properties:
+        claimId:
+          type: string
+          format: uuid
+    ChatRequest:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+        claimContext:
+          type: object
+        conversationHistory:
+          type: array
+          items:
+            type: object
+    AdminUserActionRequest:
+      type: object
+      required: [action, targetUserId]
+      properties:
+        action:
+          type: string
+          enum: [suspend, unsuspend, delete, assign_role]
+        targetUserId:
+          type: string
+          format: uuid
+        role:
+          type: string
+    TargetUserRequest:
+      type: object
+      required: [targetUserId]
+      properties:
+        targetUserId:
+          type: string
+          format: uuid
+    VerifyBackupCodeRequest:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ---------------------------------------------------------------------
+  # User-facing endpoints
+  # ---------------------------------------------------------------------
+  /claims-chat:
+    post:
+      summary: Conversational chat about a claim (Gemini-backed).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatRequest"
+      responses:
+        "200":
+          description: Chat response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Empty"
+
+  /generate-backup-codes:
+    post:
+      summary: Generate fresh MFA backup codes for the caller.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Empty"
+      responses:
+        "200":
+          description: Codes generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Empty"
+
+  /verify-backup-code:
+    post:
+      summary: Consume one MFA backup code.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyBackupCodeRequest"
+      responses:
+        "200":
+          description: Code accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Empty"
+
+  /reload-claim-from-imageright:
+    post:
+      summary: Admin — pull a single claim from ImageRight by claimId or claimNumber.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReloadRequest"
+      responses:
+        "202":
+          description: Pull started in background
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Empty"
+
+  # ---------------------------------------------------------------------
+  # Admin-only endpoints (gated on user_roles.role = 'admin' in code)
+  # ---------------------------------------------------------------------
+  /admin-user-actions:
+    post:
+      summary: Admin — suspend / unsuspend / delete / assign_role on a target user.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminUserActionRequest"
+      responses:
+        "200":
+          description: Action applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Empty"
+
+  /admin-reset-user-mfa:
+    post:
+      summary: Admin — wipe a user's enrolled TOTP factor so they re-enroll on next login.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TargetUserRequest"
+      responses:
+        "200":
+          description: MFA reset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Empty"
+
+  /admin-regenerate-backup-codes:
+    post:
+      summary: Admin — regenerate MFA backup codes on behalf of a target user.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TargetUserRequest"
+      responses:
+        "200":
+          description: Codes regenerated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Empty"
+
+  # ---------------------------------------------------------------------
+  # Internal endpoints — publicly addressable (verify_jwt=false) but
+  # protected by code-level checks + scanner-guard short-circuit.
+  # ---------------------------------------------------------------------
+  /imageright-sync:
+    post:
+      summary: Internal — orchestrates a date-range or daily-diff ImageRight pull.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SyncRequest"
+      responses:
+        "200":
+          description: Slice processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Empty"
+
+  /fetch-imageright-document:
+    post:
+      summary: Internal — fetch one document's PDF and upload to storage.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FetchDocRequest"
+      responses:
+        "200":
+          description: PDF stored / content_unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Empty"
+
+  /analyze-claim-document:
+    post:
+      summary: Internal — Vertex AI per-document extraction + analysis.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnalyzeRequest"
+      responses:
+        "200":
+          description: Analysis started (async)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Empty"
+
+  /synthesize-claim-extraction:
+    post:
+      summary: Internal — claim-level synthesis across analyzed docs.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SynthesizeRequest"
+      responses:
+        "200":
+          description: Synthesis complete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Empty"
+
+# ---------------------------------------------------------------------
+# Intentionally NOT listed (excluded from API scan by .zap/rules.tsv):
+#   - /send-email          — auth webhook only; HMAC-signed by Supabase.
+#                            No JSON shape; scanning would just be noise.
+# ---------------------------------------------------------------------

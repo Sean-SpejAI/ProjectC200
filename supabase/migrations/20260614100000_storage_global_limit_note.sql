@@ -1,0 +1,31 @@
+-- Storage upload size: the EFFECTIVE per-file limit is the MINIMUM of the
+-- project-wide global `fileSizeLimit` and the bucket's `file_size_limit`.
+-- Setting the bucket alone is NOT enough — the global ceiling clamps it.
+--
+-- History: 20260609010000_raise_claim_documents_bucket_size.sql raised the
+-- `claim-documents` bucket to 300 MB, but the project's global limit stayed at
+-- its 50 MB default. So every upload was silently capped at 50 MB — manual
+-- uploads AND server-side ImageRight ingestion alike (no document over 50 MB
+-- had ever made it into storage). Discovered 2026-06-14 when a 208 MB manual
+-- upload failed with "The object exceeded the maximum allowed size".
+--
+-- Fix (2026-06-14): raised the global fileSizeLimit to 300 MB on all three
+-- projects (dev / stage / prod). The global limit is PROJECT CONFIG, not SQL —
+-- it cannot be set from a migration. Apply it per env with the Management API:
+--
+--   curl -X PATCH https://api.supabase.com/v1/projects/<ref>/config/storage \
+--     -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+--     -H "Content-Type: application/json" \
+--     -d '{"fileSizeLimit": 314572800}'
+--
+-- 300 MB matches MAX_FILE_SIZE in supabase/functions/_shared/types.ts (the
+-- analysis pipeline's hard reject) and MAX_UPLOAD_BYTES in
+-- src/components/NewAnalysisUpload.tsx (the client-side guard). To raise the
+-- ceiling, bump all FOUR together — global limit, bucket limit, MAX_FILE_SIZE,
+-- and the client guard — and confirm the Edge worker won't OOM on the larger PDF.
+--
+-- The statement below only re-asserts the bucket limit (idempotent); the
+-- meaningful change lives in the Management API call documented above.
+UPDATE storage.buckets
+SET file_size_limit = 314572800  -- 300 * 1024 * 1024
+WHERE id = 'claim-documents';

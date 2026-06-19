@@ -1,0 +1,231 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Nodak Elite InsurTech — Material 3 surface scale */
+    /* Base surfaces */
+    --background: 222 100% 99%;          /* #f8f9ff */
+    --foreground: 215 60% 12%;           /* #0b1c30 */
+    --card: 0 0% 100%;                   /* #ffffff */
+    --card-foreground: 215 60% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 60% 12%;
+
+    /* Brand */
+    --primary: 222 100% 7%;              /* #000b21 deep navy */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 351 100% 37%;           /* #bb0021 corporate red */
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 220 100% 96%;               /* #eff4ff surface-container-low */
+    --muted-foreground: 222 7% 29%;      /* #44474e on-surface-variant */
+
+    --accent: 220 100% 96%;
+    --accent-foreground: 215 60% 12%;
+
+    --destructive: 0 75% 41%;            /* #ba1a1a */
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 222 11% 79%;               /* #c4c6ce outline-variant */
+    --input: 222 11% 79%;
+    --ring: 222 100% 7%;
+
+    --radius: 0.75rem;
+
+    /* MD3 surface tonal scale */
+    --surface: 222 100% 99%;             /* #f8f9ff */
+    --surface-dim: 218 76% 88%;          /* #cbdbf5 */
+    --surface-bright: 222 100% 99%;
+    --surface-container-lowest: 0 0% 100%;       /* #ffffff */
+    --surface-container-low: 220 100% 96%;       /* #eff4ff */
+    --surface-container: 220 100% 95%;           /* #e5eeff */
+    --surface-container-high: 217 100% 93%;      /* #dce9ff */
+    --surface-container-highest: 215 99% 91%;    /* #d3e4fe */
+    --on-surface: 215 60% 12%;
+    --on-surface-variant: 222 7% 29%;
+    --inverse-surface: 213 35% 20%;              /* #213145 */
+    --inverse-on-surface: 218 100% 96%;          /* #eaf1ff */
+
+    /* Outline */
+    --outline: 224 4% 47%;               /* #75777e */
+    --outline-variant: 222 11% 79%;      /* #c4c6ce */
+
+    /* Tonal containers */
+    --primary-container: 218 66% 15%;            /* #0d2240 */
+    --on-primary-container: 218 28% 58%;         /* #778aad */
+    --primary-fixed: 219 100% 92%;               /* #d6e3ff */
+    --primary-fixed-dim: 219 60% 81%;            /* #b4c7ed */
+    --secondary-container: 354 75% 51%;          /* #e02636 */
+    --on-secondary-container: 320 100% 99%;      /* #fffbff */
+
+    /* Status colors (high-chroma icons, low-chroma tinted bg) */
+    --success: 142 71% 35%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --info: 199 89% 48%;
+    --info-foreground: 0 0% 100%;
+
+    /* Agent chat */
+    --agent-bubble: 220 100% 96%;
+    --agent-bubble-foreground: 215 60% 12%;
+    --user-bubble: 222 100% 7%;
+    --user-bubble-foreground: 0 0% 100%;
+
+    /* Sidebar tokens */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 215 60% 12%;
+    --sidebar-primary: 222 100% 7%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 217 100% 93%;
+    --sidebar-accent-foreground: 215 60% 12%;
+    --sidebar-border: 222 11% 79%;
+    --sidebar-ring: 222 100% 7%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Inter', system-ui, sans-serif;
+    letter-spacing: -0.01em;
+  }
+
+  .material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  }
+}
+
+@layer components {
+  .shadow-elevation-1 {
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+  }
+
+  .shadow-elevation-2 {
+    box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  }
+
+  .agent-typing-indicator {
+    @apply flex items-center gap-1;
+  }
+
+  .agent-typing-indicator span {
+    @apply w-2 h-2 rounded-full bg-muted-foreground;
+    animation: typing 1.4s infinite ease-in-out both;
+  }
+
+  .agent-typing-indicator span:nth-child(1) {
+    animation-delay: -0.32s;
+  }
+
+  .agent-typing-indicator span:nth-child(2) {
+    animation-delay: -0.16s;
+  }
+
+  .glass-card {
+    @apply bg-card/80 backdrop-blur-lg border border-border/50;
+  }
+
+  .claim-card {
+    @apply p-6 rounded-2xl bg-card border border-border shadow-elevation-1 transition-all duration-300 hover:border-secondary/30;
+  }
+
+  .status-pending {
+    @apply bg-warning/10 text-warning border-warning/20;
+  }
+
+  .status-processing {
+    @apply bg-info/10 text-info border-info/20;
+  }
+
+  .status-completed {
+    @apply bg-success/10 text-success border-success/20;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+@keyframes typing {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.4s ease-out forwards;
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 hsl(222 100% 7% / 0.4);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 10px hsl(222 100% 7% / 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 hsl(222 100% 7% / 0);
+  }
+}
+
+.animate-pulse-ring {
+  animation: pulse-ring 2s infinite;
+}

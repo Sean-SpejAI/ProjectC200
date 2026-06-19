@@ -1,0 +1,355 @@
+name: ZAP Active Scan (dev/stage/prod)
+
+# Active (full) ZAP scan plus API scan. Sends injection payloads, so this
+# runs only on `workflow_dispatch` against a chosen environment. The
+# scanner-guard short-circuit in side-effecting Edge Functions prevents
+# ImageRight pulls, Resend mail, and Vertex AI calls during the scan.
+#
+# Prerequisites per environment (set under Settings → Environments):
+#   ZAP_USER_EMAIL_<ENV>
+#   ZAP_USER_PASSWORD_<ENV>
+#   ZAP_TOTP_SECRET_<ENV>
+#   SCANNER_TOKEN_<ENV>             — also set as a Supabase Edge Function
+#                                     env var (`supabase secrets set
+#                                     SCANNER_TOKEN=...`) so the guard
+#                                     actually matches.
+#   SUPABASE_URL_<ENV>              — https://<ref>.supabase.co
+#   SUPABASE_ANON_KEY_<ENV>
+#   ZAP_FRONTEND_URL_<ENV>          — https://ncp.spej.dev (prod) /
+#                                     stage preview URL / dev preview URL
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        type: choice
+        options:
+          - dev
+          - stage
+          - prod
+      run_full_scan:
+        description: Run full active scan against the frontend
+        type: boolean
+        default: true
+      run_api_scan:
+        description: Run API scan against Edge Functions via openapi.yaml
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  security-events: write   # for github/codeql-action/upload-sarif
+  issues: write            # for nightly issue-open on findings
+
+jobs:
+  mint-auth:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    outputs:
+      ready: ${{ steps.confirm.outputs.ready }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install auth-mint deps
+        run: npm install --no-save @supabase/supabase-js@2 otpauth@9
+
+      - name: Mint AAL2 JWT + write replacer.conf
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          ZAP_USER_EMAIL: ${{ secrets.ZAP_USER_EMAIL }}
+          ZAP_USER_PASSWORD: ${{ secrets.ZAP_USER_PASSWORD }}
+          ZAP_TOTP_SECRET: ${{ secrets.ZAP_TOTP_SECRET }}
+          SCANNER_TOKEN: ${{ secrets.SCANNER_TOKEN }}
+          OUT_FILE: replacer.conf
+        run: node .zap/auth-mint.mjs
+
+      - name: Upload replacer config
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-replacer-${{ inputs.environment }}
+          path: replacer.conf
+          retention-days: 1
+          if-no-files-found: error
+
+      - id: confirm
+        run: echo "ready=true" >> "$GITHUB_OUTPUT"
+
+  full-scan:
+    needs: mint-auth
+    if: inputs.run_full_scan
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    outputs:
+      alerts: ${{ steps.tally.outputs.alerts }}
+      instances: ${{ steps.tally.outputs.instances }}
+      total: ${{ steps.tally.outputs.total }}
+      high: ${{ steps.tally.outputs.high }}
+      medium: ${{ steps.tally.outputs.medium }}
+      low: ${{ steps.tally.outputs.low }}
+      info: ${{ steps.tally.outputs.info }}
+      top: ${{ steps.tally.outputs.top }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download replacer config
+        uses: actions/download-artifact@v4
+        with:
+          name: zap-replacer-${{ inputs.environment }}
+
+      - name: ZAP Full Scan
+        uses: zaproxy/action-full-scan@v0.12.0
+        with:
+          target: ${{ secrets.ZAP_FRONTEND_URL }}
+          rules_file_name: .zap/rules.tsv
+          # `replacer.conf` is in /zap/wrk inside the action's container;
+          # the action mounts the workspace there. ZAP itself runs with
+          # /zap as cwd, so configFile needs the absolute path. Output
+          # filenames default to report_{json,md,html} — we rename in the
+          # next step before SARIF conversion.
+          cmd_options: >-
+            -z "-configFile /zap/wrk/replacer.conf
+                -config scanner.threadPerHost=2 -config scanner.delayInMs=200"
+          allow_issue_writing: false
+          fail_action: false
+
+      - name: Upload raw reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-full-${{ inputs.environment }}-reports
+          path: |
+            report_html.html
+            report_md.md
+            report_json.json
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Tally findings
+        id: tally
+        if: always()
+        run: node .zap/tally-findings.mjs report_json.json >> "$GITHUB_OUTPUT"
+
+      - name: Convert JSON to SARIF
+        if: always()
+        run: |
+          if [ -f report_json.json ]; then
+            node .zap/zap-json-to-sarif.mjs report_json.json zap-full-${{ inputs.environment }}.sarif "ZAP Full Scan (${{ inputs.environment }})"
+          else
+            echo '{"version":"2.1.0","runs":[]}' > zap-full-${{ inputs.environment }}.sarif
+          fi
+
+      - name: Upload SARIF to GitHub Code Scanning
+        # Code Scanning requires GitHub Advanced Security on private repos.
+        # Without GHAS the upload returns "Resource not accessible by
+        # integration"; we keep the step but mark it non-fatal so the
+        # workflow stays green and the artifacts remain authoritative.
+        if: always() && hashFiles(format('zap-full-{0}.sarif', inputs.environment)) != ''
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: zap-full-${{ inputs.environment }}.sarif
+          category: zap-full-${{ inputs.environment }}
+
+      - name: Upload SARIF as artifact (fallback when Code Scanning is off)
+        if: always() && hashFiles(format('zap-full-{0}.sarif', inputs.environment)) != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-full-${{ inputs.environment }}-sarif
+          path: zap-full-${{ inputs.environment }}.sarif
+          retention-days: 90
+
+      - name: Email report
+        if: always() && hashFiles('report_json.json') != ''
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          ZAP_REPORT_TO: ${{ secrets.ZAP_REPORT_TO }}
+          SCAN_KIND: full
+          SCAN_ENV: ${{ inputs.environment }}
+          SCAN_TARGET: ${{ secrets.ZAP_FRONTEND_URL }}
+          GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node .zap/send-report.mjs report_json.json report_html.html
+
+  api-scan:
+    needs: mint-auth
+    if: inputs.run_api_scan
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    outputs:
+      alerts: ${{ steps.tally.outputs.alerts }}
+      instances: ${{ steps.tally.outputs.instances }}
+      total: ${{ steps.tally.outputs.total }}
+      high: ${{ steps.tally.outputs.high }}
+      medium: ${{ steps.tally.outputs.medium }}
+      low: ${{ steps.tally.outputs.low }}
+      info: ${{ steps.tally.outputs.info }}
+      top: ${{ steps.tally.outputs.top }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download replacer config
+        uses: actions/download-artifact@v4
+        with:
+          name: zap-replacer-${{ inputs.environment }}
+
+      - name: Substitute project ref into openapi.yaml
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        run: |
+          # Pull the ref out of https://<ref>.supabase.co
+          REF=$(echo "$SUPABASE_URL" | sed -E 's#https?://([^.]+)\.supabase\.co.*#\1#')
+          echo "Using ref=$REF"
+          sed -i "s/default: evpmuoxfrnmustokkaqg/default: $REF/" .zap/openapi.yaml
+
+      - name: ZAP API Scan
+        uses: zaproxy/action-api-scan@v0.9.0
+        with:
+          target: .zap/openapi.yaml
+          format: openapi
+          rules_file_name: .zap/rules.tsv
+          # See note on full-scan: /zap/wrk is the mount point.
+          cmd_options: >-
+            -z "-configFile /zap/wrk/replacer.conf
+                -config scanner.threadPerHost=2 -config scanner.delayInMs=200"
+          allow_issue_writing: false
+          fail_action: false
+
+      - name: Upload raw reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-api-${{ inputs.environment }}-reports
+          path: |
+            report_html.html
+            report_md.md
+            report_json.json
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Tally findings
+        id: tally
+        if: always()
+        run: node .zap/tally-findings.mjs report_json.json >> "$GITHUB_OUTPUT"
+
+      - name: Convert JSON to SARIF
+        if: always()
+        run: |
+          if [ -f report_json.json ]; then
+            node .zap/zap-json-to-sarif.mjs report_json.json zap-api-${{ inputs.environment }}.sarif "ZAP API Scan (${{ inputs.environment }})"
+          else
+            echo '{"version":"2.1.0","runs":[]}' > zap-api-${{ inputs.environment }}.sarif
+          fi
+
+      - name: Upload SARIF to GitHub Code Scanning
+        # See note on full-scan.
+        if: always() && hashFiles(format('zap-api-{0}.sarif', inputs.environment)) != ''
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: zap-api-${{ inputs.environment }}.sarif
+          category: zap-api-${{ inputs.environment }}
+
+      - name: Upload SARIF as artifact (fallback when Code Scanning is off)
+        if: always() && hashFiles(format('zap-api-{0}.sarif', inputs.environment)) != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-api-${{ inputs.environment }}-sarif
+          path: zap-api-${{ inputs.environment }}.sarif
+          retention-days: 90
+
+      - name: Email report
+        if: always() && hashFiles('report_json.json') != ''
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          ZAP_REPORT_TO: ${{ secrets.ZAP_REPORT_TO }}
+          SCAN_KIND: api
+          SCAN_ENV: ${{ inputs.environment }}
+          SCAN_TARGET: .zap/openapi.yaml against ${{ secrets.SUPABASE_URL }}
+          GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node .zap/send-report.mjs report_json.json report_html.html
+
+  summary-issue:
+    needs: [full-scan, api-scan]
+    # Open a triage issue whenever EITHER scan surfaced any finding. Scan
+    # jobs themselves succeed under fail_action:false, so we drive the
+    # condition off the per-scan finding tally rather than job status.
+    # `|| 0` defaults cover the case where the corresponding scan was
+    # disabled via the workflow input (its job didn't run).
+    if: >-
+      always() &&
+      (fromJSON(needs.full-scan.outputs.total || 0) > 0 ||
+       fromJSON(needs.api-scan.outputs.total || 0) > 0)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const env = '${{ inputs.environment }}';
+            const today = new Date().toISOString().slice(0, 10);
+            const full = {
+              alerts: Number('${{ needs.full-scan.outputs.alerts || 0 }}'),
+              instances: Number('${{ needs.full-scan.outputs.instances || 0 }}'),
+              high:   Number('${{ needs.full-scan.outputs.high   || 0 }}'),
+              medium: Number('${{ needs.full-scan.outputs.medium || 0 }}'),
+              low:    Number('${{ needs.full-scan.outputs.low    || 0 }}'),
+              info:   Number('${{ needs.full-scan.outputs.info   || 0 }}'),
+              top:    '${{ needs.full-scan.outputs.top || '' }}',
+            };
+            const api = {
+              alerts: Number('${{ needs.api-scan.outputs.alerts || 0 }}'),
+              instances: Number('${{ needs.api-scan.outputs.instances || 0 }}'),
+              high:   Number('${{ needs.api-scan.outputs.high   || 0 }}'),
+              medium: Number('${{ needs.api-scan.outputs.medium || 0 }}'),
+              low:    Number('${{ needs.api-scan.outputs.low    || 0 }}'),
+              info:   Number('${{ needs.api-scan.outputs.info   || 0 }}'),
+              top:    '${{ needs.api-scan.outputs.top || '' }}',
+            };
+
+            const totalAlerts    = full.alerts + api.alerts;
+            const totalInstances = full.instances + api.instances;
+            const grandHigh = full.high + api.high;
+            const grandMed  = full.medium + api.medium;
+            const severityTag = grandHigh > 0 ? 'severity-high'
+                              : grandMed  > 0 ? 'severity-medium'
+                              :                 'severity-low';
+
+            const fmtTop = (s) => s ? s.split(';').filter(Boolean).map(n => '`' + n + '`').join(', ') : '_none_';
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `ZAP scan: ${totalAlerts} alert(s) (${totalInstances} instances) on ${env} (${today})`,
+              labels: ['security-triage', `env-${env}`, severityTag],
+              body: [
+                `ZAP active scan against **${env}** surfaced **${totalAlerts} alert type(s)** across ${full.alerts > 0 ? 1 : 0} frontend run and ${api.alerts > 0 ? 1 : 0} API run, totaling **${totalInstances} instance(s)**.`,
+                '',
+                `Counts are by alert type (matching ZAP's own summary). The same Medium alert hitting 4 URLs is "Medium: 1" with "Instances: 4".`,
+                '',
+                `| Scan | Alerts | High | Medium | Low | Info | Instances |`,
+                `|---|---:|---:|---:|---:|---:|---:|`,
+                `| Frontend (full) | ${full.alerts} | ${full.high} | ${full.medium} | ${full.low} | ${full.info} | ${full.instances} |`,
+                `| Edge Functions (API) | ${api.alerts} | ${api.high} | ${api.medium} | ${api.low} | ${api.info} | ${api.instances} |`,
+                '',
+                `**Top alert names (frontend):** ${fmtTop(full.top)}`,
+                `**Top alert names (API):** ${fmtTop(api.top)}`,
+                '',
+                `### Where the reports live`,
+                `- HTML, JSON, MD reports + SARIF: workflow run artifacts (90-day retention).`,
+                `- If GitHub Advanced Security is licensed on this repo, findings also appear under Security → Code scanning alerts (category \`zap-*-${env}\`).`,
+                '',
+                `### Triage`,
+                `1. Download the report artifacts from the run linked below.`,
+                `2. For each finding, decide: actionable, accepted risk, or false positive.`,
+                `3. False positives / accepted risk: add a row to \`.zap/rules.tsv\` with a comment above explaining why.`,
+                `4. Actionable: file or link the fix PR in this issue.`,
+                `5. Close this issue once all findings are accounted for.`,
+                '',
+                `Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`,
+              ].join('\n'),
+            });

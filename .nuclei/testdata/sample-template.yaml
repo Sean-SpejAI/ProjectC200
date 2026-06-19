@@ -1,0 +1,16 @@
+id: tomcat-default-credentials
+
+info:
+  name: Apache Tomcat Default Credentials
+  author: pussycat0x,gy741
+  severity: high
+  description: |
+    Apache Tomcat with default creds is bad.
+  reference:
+    - https://example.com
+  classification:
+    cvss-score: 9.8
+  tags: tomcat,default-login,apache
+
+http:
+  - method: GET

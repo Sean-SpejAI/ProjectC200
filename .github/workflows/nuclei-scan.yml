@@ -1,0 +1,360 @@
+name: Nuclei Scan (dev/stage/prod)
+
+# ProjectDiscovery's Nuclei vulnerability scanner. Manual-only — runs on
+# workflow_dispatch against a chosen environment. Sends potentially-active
+# probes (template-driven), so the same scanner-guard short-circuit that
+# protects ZAP runs also protects this one: the `x-scanner-run` header tells
+# instrumented Edge Functions to skip ImageRight pulls, Resend mail, and
+# Vertex AI calls.
+#
+# Auth model:
+#   - Reuses the existing ZAP scanner user (zap-scanner+<env>@spej.ai) and
+#     all ZAP_* / SUPABASE_* / SCANNER_TOKEN_* / ZAP_FRONTEND_URL_* secrets.
+#     No parallel identity. If recipients diverge from ZAP_REPORT_TO in the
+#     future, introduce NUCLEI_REPORT_TO and switch the env block below.
+#
+# Templates:
+#   - Stock template set baked into projectdiscovery/nuclei:latest, filtered
+#     to the impactful tags (cve, exposure, misconfig, vulnerability) and
+#     medium/high/critical severity by default. Override via workflow inputs.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        type: choice
+        options:
+          - dev
+          - stage
+          - prod
+      audit_mode:
+        description: "Audit-grade scan (all severities + all non-CMS tags, ~25-40 min). When true, the severity/tags inputs below are ignored."
+        required: false
+        type: boolean
+        default: false
+      severity:
+        description: Severity filter for routine scans (comma-separated). Ignored when audit_mode=true.
+        required: false
+        type: string
+        default: "medium,high,critical"
+      tags:
+        description: Template tags for routine scans (comma-separated). Ignored when audit_mode=true.
+        required: false
+        type: string
+        default: "cve,exposure,misconfig,vulnerability"
+
+permissions:
+  contents: read
+  security-events: write   # for github/codeql-action/upload-sarif
+  issues: write            # for the summary issue when findings surface
+
+jobs:
+  scan:
+    # Self-hosted runner on the nodak-prod Azure VM (static public IP
+    # 20.9.44.53). Moved off ubuntu-latest because Vercel's adaptive
+    # edge throttle was repeatedly aborting audit-mode scans at
+    # ~26-43% completion when bursts came from GitHub-hosted runner
+    # IPs (which rotate). A static source IP lets the request pattern
+    # stay below Vercel's per-source threshold; if it still trips,
+    # the IP can be allowlisted in Vercel's firewall (requires Pro).
+    # Runner has Docker (for the projectdiscovery/nuclei container),
+    # Node 22 (via actions/setup-node), and google-chrome-stable
+    # (for the PDF build step) pre-installed.
+    runs-on: [self-hosted, nodak-prod]
+    environment: ${{ inputs.environment }}
+    outputs:
+      alerts:    ${{ steps.tally.outputs.alerts }}
+      instances: ${{ steps.tally.outputs.instances }}
+      total:     ${{ steps.tally.outputs.total }}
+      critical:  ${{ steps.tally.outputs.critical }}
+      high:      ${{ steps.tally.outputs.high }}
+      medium:    ${{ steps.tally.outputs.medium }}
+      low:       ${{ steps.tally.outputs.low }}
+      info:      ${{ steps.tally.outputs.info }}
+      top:       ${{ steps.tally.outputs.top }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install auth-mint deps
+        run: npm install --no-save @supabase/supabase-js@2 otpauth@9
+
+      - name: Resolve effective scan filter
+        # audit_mode=true overrides the routine severity+tags filter with a
+        # comprehensive set: all severities, all positive tags, only the CMS
+        # families are excluded (target is not WordPress/Joomla/Drupal/Magento,
+        # so those templates would all 404 / no-match anyway — skipping saves
+        # ~20% scan time). The exclusion list is surfaced in the deliverable
+        # so an auditor can see exactly what was scoped out.
+        id: filter
+        env:
+          AUDIT_MODE: ${{ inputs.audit_mode }}
+          INPUT_SEVERITY: ${{ inputs.severity }}
+          INPUT_TAGS: ${{ inputs.tags }}
+        run: |
+          if [ "$AUDIT_MODE" = "true" ]; then
+            SEVERITY="info,low,medium,high,critical"
+            TAGS=""
+            EXCLUDE_TAGS="wordpress,wp,wp-plugin,wp-theme,joomla,drupal,magento"
+            MODE_LABEL="audit-grade"
+          else
+            SEVERITY="$INPUT_SEVERITY"
+            TAGS="$INPUT_TAGS"
+            EXCLUDE_TAGS=""
+            MODE_LABEL="routine"
+          fi
+          echo "severity=$SEVERITY"     >> "$GITHUB_OUTPUT"
+          echo "tags=$TAGS"             >> "$GITHUB_OUTPUT"
+          echo "exclude_tags=$EXCLUDE_TAGS" >> "$GITHUB_OUTPUT"
+          echo "mode_label=$MODE_LABEL" >> "$GITHUB_OUTPUT"
+          echo "--- effective scan filter ---"
+          echo "  mode=$MODE_LABEL"
+          echo "  severity=$SEVERITY"
+          echo "  tags=$TAGS"
+          echo "  exclude_tags=$EXCLUDE_TAGS"
+
+      - name: Mint AAL2 JWT
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          ZAP_USER_EMAIL: ${{ secrets.ZAP_USER_EMAIL }}
+          ZAP_USER_PASSWORD: ${{ secrets.ZAP_USER_PASSWORD }}
+          ZAP_TOTP_SECRET: ${{ secrets.ZAP_TOTP_SECRET }}
+          OUT_FILE: .nuclei/token.txt
+        run: node .nuclei/auth-mint.mjs
+
+      - name: Enumerate templates (audit-trail inventory)
+        # Pre-scan: enumerate every Nuclei template that the effective filter
+        # would run. Writes nuclei-templates-inventory.json with
+        # {path,id,name,severity,tags} per template. Required for the audit
+        # email + PDF — without it the "tests run" count is unknown.
+        env:
+          SEVERITY: ${{ steps.filter.outputs.severity }}
+          TAGS: ${{ steps.filter.outputs.tags }}
+          EXCLUDE_TAGS: ${{ steps.filter.outputs.exclude_tags }}
+        run: |
+          chmod +x .nuclei/enumerate-templates.sh
+          docker run --rm \
+            -v "${{ github.workspace }}:/work" \
+            -w /work \
+            --entrypoint sh \
+            projectdiscovery/nuclei:latest \
+            /work/.nuclei/enumerate-templates.sh "$TAGS" "$SEVERITY" "$EXCLUDE_TAGS"
+          echo "--- inventory summary ---"
+          if [ -f nuclei-templates-inventory.json ]; then
+            grep -o '"severity":"[^"]*"' nuclei-templates-inventory.json | sort | uniq -c
+          fi
+
+      - name: Run Nuclei
+        env:
+          TARGET: ${{ secrets.ZAP_FRONTEND_URL }}
+          SCANNER_TOKEN: ${{ secrets.SCANNER_TOKEN }}
+          SEVERITY: ${{ steps.filter.outputs.severity }}
+          TAGS: ${{ steps.filter.outputs.tags }}
+          EXCLUDE_TAGS: ${{ steps.filter.outputs.exclude_tags }}
+        run: |
+          set -o pipefail
+          TOKEN="$(cat .nuclei/token.txt)"
+          # Build the nuclei flag list dynamically so -tags is only set when
+          # TAGS is non-empty (audit-mode passes empty to mean "all tags") and
+          # -exclude-tags is only set when EXCLUDE_TAGS is non-empty.
+          # Rate + resilience tuning:
+          # -rate-limit 30: gentler on the target's edge (Vercel rate-limits
+          #   hard above ~50 rps from a single source; 50 occasionally trips
+          #   the unresponsive-host check below).
+          # -bulk-size 25: hosts processed in parallel; we only have one
+          #   host so this mostly governs template concurrency per host.
+          # -timeout 10: per-request timeout.
+          # -max-host-error 1000: by default nuclei marks a host
+          #   "unresponsive permanently" after 30 cumulative errors, which
+          #   on a rate-limited target like Vercel kills the scan around
+          #   30% completion. Raise the threshold so transient 429s/RSTs
+          #   don't abort an audit run.
+          NUCLEI_FLAGS="-u \"$TARGET\" -H \"Authorization: Bearer ${TOKEN}\" -H \"x-scanner-run: ${SCANNER_TOKEN}\" -severity \"$SEVERITY\" -j -o nuclei.jsonl -sarif-export nuclei.sarif -no-color -stats-json -stats-interval 10 -rate-limit 30 -bulk-size 25 -timeout 10 -max-host-error 1000"
+          [ -n "$TAGS" ]         && NUCLEI_FLAGS="$NUCLEI_FLAGS -tags \"$TAGS\""
+          [ -n "$EXCLUDE_TAGS" ] && NUCLEI_FLAGS="$NUCLEI_FLAGS -exclude-tags \"$EXCLUDE_TAGS\""
+          # Drop -silent so -stats-json can write a per-interval summary
+          # (matched, requests, templates, etc.) to stdout. Findings still
+          # go to nuclei.jsonl via -j -o. We grep stats lines out of stdout
+          # since dropping -silent re-enables the banner + progress noise.
+          set +e
+          eval docker run --rm \
+            -v "${{ github.workspace }}:/work" \
+            -w /work \
+            projectdiscovery/nuclei:latest \
+            $NUCLEI_FLAGS \
+            2>&1 | tee nuclei-raw-stdout.log \
+                 | grep -E '^\{.*"templates":' > nuclei-stats.jsonl || true
+          EXIT=${PIPESTATUS[0]}
+          set -e
+          echo "nuclei exit=$EXIT (non-zero means findings or non-fatal error — see jsonl)"
+          echo "--- stats lines captured: $(wc -l < nuclei-stats.jsonl) ---"
+
+      - name: Show nuclei output preview
+        if: always()
+        run: |
+          if [ -f nuclei.jsonl ]; then
+            echo "--- nuclei.jsonl line count ---"
+            wc -l nuclei.jsonl
+            echo "--- first 3 findings (raw) ---"
+            head -3 nuclei.jsonl
+          else
+            echo "no nuclei.jsonl produced"
+          fi
+          if [ -f nuclei-stats.jsonl ]; then
+            echo "--- final stats line ---"
+            tail -1 nuclei-stats.jsonl
+          fi
+
+      - name: Tally findings
+        id: tally
+        if: always()
+        run: node .nuclei/tally-findings.mjs nuclei.jsonl nuclei-templates-inventory.json >> "$GITHUB_OUTPUT"
+
+      - name: Build audit PDF
+        if: always() && hashFiles('nuclei-templates-inventory.json') != ''
+        env:
+          SCAN_ENV: ${{ inputs.environment }}
+          SCAN_TARGET: ${{ secrets.ZAP_FRONTEND_URL }}
+          SEVERITY: ${{ steps.filter.outputs.severity }}
+          TAGS: ${{ steps.filter.outputs.tags }}
+          EXCLUDE_TAGS: ${{ steps.filter.outputs.exclude_tags }}
+          MODE_LABEL: ${{ steps.filter.outputs.mode_label }}
+          GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          DATE=$(date -u +%Y-%m-%d)
+          OUT="nuclei-audit-report-${{ inputs.environment }}-${DATE}.pdf"
+          # google-chrome-stable is preinstalled on ubuntu-latest runners.
+          node .nuclei/build-audit-pdf.mjs \
+            nuclei-templates-inventory.json \
+            nuclei.jsonl \
+            nuclei-stats.jsonl \
+            "$OUT"
+          ls -la "$OUT" nuclei-audit-report-*.html 2>&1 || true
+
+      - name: Upload raw reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuclei-${{ inputs.environment }}-reports
+          path: |
+            nuclei.jsonl
+            nuclei.sarif
+            nuclei-templates-inventory.json
+            nuclei-stats.jsonl
+            nuclei-raw-stdout.log
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Upload audit PDF
+        if: always() && hashFiles('nuclei-audit-report-*.pdf') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuclei-${{ inputs.environment }}-audit-pdf
+          path: |
+            nuclei-audit-report-*.pdf
+            nuclei-audit-report-*.html
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Upload SARIF to GitHub Code Scanning
+        # Like the ZAP workflow: Code Scanning requires GHAS on private repos.
+        # Without GHAS the upload returns 403; we keep the step but mark it
+        # non-fatal so the workflow stays green and the artifacts remain
+        # authoritative.
+        if: always() && hashFiles('nuclei.sarif') != ''
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: nuclei.sarif
+          category: nuclei-${{ inputs.environment }}
+
+      - name: Email report
+        if: always() && hashFiles('nuclei.jsonl') != ''
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          # Distinct from ZAP_REPORT_TO so Nuclei recipients can diverge from
+          # ZAP recipients per env. Set this secret in each GH Environment
+          # (dev/stage/prod) to whoever should receive Nuclei reports.
+          NUCLEI_REPORT_TO: ${{ secrets.NUCLEI_REPORT_TO }}
+          SCAN_ENV: ${{ inputs.environment }}
+          SCAN_TARGET: ${{ secrets.ZAP_FRONTEND_URL }}
+          SEVERITY: ${{ steps.filter.outputs.severity }}
+          TAGS: ${{ steps.filter.outputs.tags }}
+          EXCLUDE_TAGS: ${{ steps.filter.outputs.exclude_tags }}
+          MODE_LABEL: ${{ steps.filter.outputs.mode_label }}
+          STATS_PATH: nuclei-stats.jsonl
+          GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          # The Build-audit-PDF step writes nuclei-audit-report-<env>-<date>.pdf;
+          # only one PDF per run, so a glob is safe. Falls back to empty if the
+          # PDF step was skipped — send-report tolerates a missing path.
+          PDF=$(ls nuclei-audit-report-*.pdf 2>/dev/null | head -1)
+          node .nuclei/send-report.mjs nuclei.jsonl nuclei-templates-inventory.json "$PDF"
+
+      - name: Cleanup token
+        if: always()
+        run: rm -f .nuclei/token.txt
+
+  summary-issue:
+    needs: scan
+    # Open a triage issue whenever the scan surfaced a real finding. We use
+    # the tallied alert-type counts; under the default severity filter this
+    # only fires on medium/high/critical (info/low are filtered out at the
+    # nuclei layer).
+    if: always() && fromJSON(needs.scan.outputs.total || 0) > 0
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const env = '${{ inputs.environment }}';
+            const today = new Date().toISOString().slice(0, 10);
+            const s = {
+              alerts:    Number('${{ needs.scan.outputs.alerts    || 0 }}'),
+              instances: Number('${{ needs.scan.outputs.instances || 0 }}'),
+              critical:  Number('${{ needs.scan.outputs.critical  || 0 }}'),
+              high:      Number('${{ needs.scan.outputs.high      || 0 }}'),
+              medium:    Number('${{ needs.scan.outputs.medium    || 0 }}'),
+              low:       Number('${{ needs.scan.outputs.low       || 0 }}'),
+              info:      Number('${{ needs.scan.outputs.info      || 0 }}'),
+              top:       '${{ needs.scan.outputs.top || '' }}',
+            };
+            const severityTag = s.critical > 0 ? 'severity-critical'
+                              : s.high     > 0 ? 'severity-high'
+                              : s.medium   > 0 ? 'severity-medium'
+                              :                  'severity-low';
+            const fmtTop = (x) => x ? x.split(';').filter(Boolean).map(n => '`' + n + '`').join(', ') : '_none_';
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Nuclei scan: ${s.alerts} template(s) (${s.instances} instances) on ${env} (${today})`,
+              labels: ['security-triage', `env-${env}`, severityTag, 'scanner-nuclei'],
+              body: [
+                `Nuclei active scan against **${env}** surfaced **${s.alerts} template type(s)** totaling **${s.instances} instance(s)**.`,
+                '',
+                `| Critical | High | Medium | Low | Info |`,
+                `|---:|---:|---:|---:|---:|`,
+                `| ${s.critical} | ${s.high} | ${s.medium} | ${s.low} | ${s.info} |`,
+                '',
+                `**Top templates:** ${fmtTop(s.top)}`,
+                '',
+                `### Where the reports live`,
+                `- JSONL + SARIF: workflow run artifacts (90-day retention).`,
+                `- If GitHub Advanced Security is licensed, findings also appear under Security → Code scanning alerts (category \`nuclei-${env}\`).`,
+                '',
+                `### Triage`,
+                `1. Download the JSONL artifact from the run linked below.`,
+                `2. For each finding: actionable, accepted risk, or false positive?`,
+                `3. False positives / accepted risk: add the template-id (or a URL regex) to \`.nuclei/ignore.yaml\` with a comment explaining why.`,
+                `4. Actionable: file or link the fix PR in this issue.`,
+                `5. Close once all findings are accounted for.`,
+                '',
+                `Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`,
+              ].join('\n'),
+            });

@@ -1,0 +1,90 @@
+name: ZAP Pending Follow-ups Reminder
+
+# Posts a "pending ZAP follow-ups" issue on a schedule so deferred items
+# from the security-scanning plan don't get lost. Currently tracks:
+#
+#   1. Upgrade PR-time scanning from baseline-only to baseline + full + api.
+#      Deferred because full+api adds ~25 min of CI time per PR and PRs
+#      against main hit the Stage Supabase backend with active payloads.
+#      Plan: enable once PR cadence drops to a sustainable level.
+#
+# Cron is the 1st of every month at 14:00 UTC. Bump cadence (or add items)
+# by editing this file. Also runnable on demand via workflow_dispatch.
+
+on:
+  schedule:
+    - cron: "0 14 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  open-reminder:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const today = new Date().toISOString().slice(0, 10);
+            const title = `Security follow-ups — review (${today})`;
+            const body = [
+              `Monthly check-in for deferred security-scanning work. Close this issue once each item is either done or explicitly re-deferred.`,
+              ``,
+              `## Pending`,
+              ``,
+              `### Upgrade PR scanning from baseline-only to baseline + full + api`,
+              ``,
+              `Today, only the **passive baseline** scan runs on every PR (via \`.github/workflows/zap-baseline.yml\`). Active full and API scans (\`zap-scan.yml\`) require manual \`workflow_dispatch\`.`,
+              ``,
+              `Approved future state: also auto-run **full + api** scans on every PR. Trade-offs to revisit at decision time:`,
+              ``,
+              `- Adds ~25 min of CI per PR (full ~4m, api ~22m)`,
+              `- PR previews hit Stage Supabase regardless of target branch — scanner-guard prevents side effects, but Vertex AI quota gets exercised`,
+              `- Action items if/when ready:`,
+              `  1. Add a \`full-scan\` + \`api-scan\` job to \`.github/workflows/zap-baseline.yml\` (rename it to \`zap-pr.yml\`).`,
+              `  2. Use the Stage environment's secrets (\`SCANNER_TOKEN\`, \`ZAP_USER_*\`, \`ZAP_TOTP_SECRET\`) since Vercel previews point at Stage.`,
+              `  3. Email recipient flow remains the same (\`RESEND_API_KEY\` + \`ZAP_REPORT_TO\`).`,
+              ``,
+              `### Other deferred items (cross-reference)`,
+              ``,
+              `- TOTP rotation for \`zap-scanner+{dev,stage,prod}@spej.ai\` (quarterly cadence).`,
+              `- Vertex AI quota investigation for the per-claim Gemini rate limits seen on Dev.`,
+              `- pg_cron install on Dev (so the daily-diff ImageRight sync runs without manual triggers).`,
+              `- Consider GitHub Advanced Security so SARIF lands in the Security tab instead of just artifacts.`,
+              ``,
+              `---`,
+              ``,
+              `_Auto-posted by \`.github/workflows/zap-reminders.yml\`._`,
+            ].join("\n");
+
+            // Dedupe: if there's already an open reminder issue from this month, just nudge it.
+            const month = today.slice(0, 7);
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'security-reminder',
+              state: 'open',
+              per_page: 50,
+            });
+            const sameMonth = existing.find(i => i.title.startsWith('Security follow-ups') && i.created_at.startsWith(month));
+            if (sameMonth) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: sameMonth.number,
+                body: `Reminder ping (${today}). Items above still open.`,
+              });
+              console.log(`Commented on existing issue #${sameMonth.number}`);
+              return;
+            }
+
+            const { data: created } = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              labels: ['security-reminder'],
+              body,
+            });
+            console.log(`Opened issue #${created.number}`);

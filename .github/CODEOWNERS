@@ -1,0 +1,16 @@
+# Code ownership for security-sensitive paths. GitHub enforces these as
+# required reviewers when the corresponding branch protection rule is on.
+#
+# Update the owner handle below as the team grows. Today this is a single
+# maintainer; add a `@org/security` team here when one exists.
+
+# Security scanning configuration — ZAP context, suppression rules, auth
+# helper, and OpenAPI spec for API scanning.
+/.zap/                                                @Sean-SpejAI
+/.github/workflows/zap-*.yml                          @Sean-SpejAI
+/supabase/functions/_shared/scanner-guard.ts          @Sean-SpejAI
+
+# Any change to an Edge Function should also update .zap/openapi.yaml so
+# the scanner enumerates the new surface. Reviewer should confirm the
+# spec is in sync before merging.
+/supabase/functions/                                  @Sean-SpejAI

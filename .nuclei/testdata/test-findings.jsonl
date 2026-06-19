@@ -1,0 +1,2 @@
+{"template-id":"missing-security-headers","info":{"name":"Missing Security Headers","severity":"medium","tags":["misconfig","headers"]},"matched-at":"https://ncp.spej.dev/"}
+{"template-id":"missing-security-headers","info":{"name":"Missing Security Headers","severity":"medium","tags":["misconfig","headers"]},"matched-at":"https://ncp.spej.dev/login"}
