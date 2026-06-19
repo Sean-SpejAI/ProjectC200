@@ -11,7 +11,7 @@
 --
 -- The existing `document_type` TEXT column remains as the PRIMARY classification
 -- (entry with the largest page coverage) for back-compat with the UI + the
--- ImageRight metadata override. New code uses `document_classifications` for
+-- Sor metadata override. New code uses `document_classifications` for
 -- multi-label type-aware required-field rules; old code reading `document_type`
 -- keeps working.
 

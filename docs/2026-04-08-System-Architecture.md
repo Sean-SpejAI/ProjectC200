@@ -1,8 +1,8 @@
-# Nodak Claims Analyzer - System Architecture
+# Spej Claims Analyzer - System Architecture
 
 ## Overview
 
-The Nodak Claims Analyzer is an AI-powered insurance claims document review system. Adjusters upload claim documents (demand letters, medical records, bills), and the system uses Google Gemini to extract structured data, score completeness, and present findings for human review.
+The Spej Claims Analyzer is an AI-powered insurance claims document review system. Adjusters upload claim documents (demand letters, medical records, bills), and the system uses Google Gemini to extract structured data, score completeness, and present findings for human review.
 
 ```mermaid
 graph TB
@@ -58,9 +58,9 @@ graph LR
     end
 
     subgraph Supabase
-        S_DEV[Nodak Claims Analyzer - Dev]
-        S_STG[Nodak Claims Analyzer - Stage]
-        S_PROD[Nodak Claims Analyzer]
+        S_DEV[Spej Claims Analyzer - Dev]
+        S_STG[Spej Claims Analyzer - Stage]
+        S_PROD[Spej Claims Analyzer]
     end
 
     DEV -->|push| V_DEV
@@ -76,9 +76,9 @@ graph LR
 
 | Branch | Vercel Env | Supabase Project | Deploy Trigger |
 |--------|-----------|------------------|----------------|
-| `development` | Development | Nodak Claims Analyzer - Dev | Push to branch |
-| `stage` | Preview | Nodak Claims Analyzer - Stage | PR merge from development |
-| `main` | Production | Nodak Claims Analyzer | PR merge from stage |
+| `development` | Development | Spej Claims Analyzer - Dev | Push to branch |
+| `stage` | Preview | Spej Claims Analyzer - Stage | PR merge from development |
+| `main` | Production | Spej Claims Analyzer | PR merge from stage |
 
 Each deploy workflow runs: build + test + Vercel deploy + Supabase migrations + edge function deploy.
 

@@ -9,7 +9,7 @@ import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 //
 // Shared by:
 //   - analyze-claim-document: a document just finished its final stage.
-//   - imageright-pull-claim:  a reconcile run that ONLY removed documents —
+//   - sor-pull-claim:  a reconcile run that ONLY removed documents —
 //     nothing is dispatched to analyze, so synthesis must be kicked explicitly
 //     to drop the removed docs' extractions from the claim summary.
 //
@@ -31,7 +31,7 @@ export async function maybeFireSynthesis(
       .from("claim_documents")
       .select("processing_status")
       .eq("claim_id", claimId)
-      .is("imageright_removed_at", null);
+      .is("sor_removed_at", null);
     const inFlight = (siblings ?? []).filter(
       (s) => s.processing_status === "pending" || s.processing_status === "processing",
     );

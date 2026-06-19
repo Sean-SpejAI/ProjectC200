@@ -1,6 +1,6 @@
-// Approve (or reject) a held ImageRight reconcile for a human-edited claim.
+// Approve (or reject) a held Sor reconcile for a human-edited claim.
 //
-// When ImageRight data changes on a claim whose analysis a reviewer has edited,
+// When Sor data changes on a claim whose analysis a reviewer has edited,
 // pullClaim parks the change (claims.synthesis_status='awaiting_approval' +
 // pending_reconcile). This endpoint lets an admin / claims manager decide:
 //
@@ -19,7 +19,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 // type we pass to loadReconcileThresholds matches.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { scannerShortCircuit } from "../_shared/scanner-guard.ts";
-import { pullClaim, loadReconcileThresholds } from "../_shared/imageright-pull-claim.ts";
+import { pullClaim, loadReconcileThresholds } from "../_shared/sor-pull-claim.ts";
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void };
 
@@ -78,7 +78,7 @@ serve(async (req) => {
 
     const { data: claim, error: claimErr } = await admin
       .from("claims")
-      .select("id, imageright_file_id, pending_reconcile, synthesis_status")
+      .select("id, sor_file_id, pending_reconcile, synthesis_status")
       .eq("id", claimId)
       .maybeSingle();
     if (claimErr) throw claimErr;
@@ -102,13 +102,13 @@ serve(async (req) => {
     // Approve → re-run the reconcile, bypassing the human-edit gate. Thread in the
     // mode the reviewer approved so pullClaim can RE-HOLD if the change grew more
     // destructive since approval (consent guard).
-    if (!claim.imageright_file_id) return jsonResponse(400, { error: "claim_not_synced" });
-    const fileId = Number(claim.imageright_file_id);
+    if (!claim.sor_file_id) return jsonResponse(400, { error: "claim_not_synced" });
+    const fileId = Number(claim.sor_file_id);
     const approvedMode = (claim.pending_reconcile as { mode?: "incremental" | "full" } | null)?.mode;
     const thresholds = await loadReconcileThresholds(admin);
 
     const { data: run } = await admin
-      .from("imageright_sync_runs")
+      .from("sor_sync_runs")
       .insert({
         run_type: "manual_reload",
         triggered_by: userId,
@@ -133,7 +133,7 @@ serve(async (req) => {
         });
         if (run?.id) {
           await admin
-            .from("imageright_sync_runs")
+            .from("sor_sync_runs")
             .update({
               status: result.status === "failed" ? "failed" : "completed",
               completed_at: new Date().toISOString(),

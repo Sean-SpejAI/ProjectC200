@@ -3,7 +3,7 @@
 // Replaces Supabase's default email sender for every transactional auth email
 // (signup confirmation, password reset, email-change, magic link, invite,
 // reauthentication). Supabase POSTs to this endpoint with a Standard Webhooks
-// signature; we verify, render a Nodak-branded HTML/text email, and dispatch
+// signature; we verify, render a Spej-branded HTML/text email, and dispatch
 // via the Resend API.
 //
 // Configuration (per Supabase project, via Management API):
@@ -25,10 +25,10 @@ import { scannerShortCircuit } from "../_shared/scanner-guard.ts";
 
 // Sender uses the info.spej.dev subdomain (verified in Resend). Apex spej.dev
 // is NOT verified — using it returns 403 "domain not verified" from Resend.
-const FROM_ADDRESS = "Nodak Demand Packet Review Portal <noreply@info.spej.dev>";
+const FROM_ADDRESS = "Spej Demand Packet Review Portal <noreply@info.spej.dev>";
 const LOGO_URL = "https://ncp.spej.dev/logo.png";
-const COMPANY_NAME = "Nodak Insurance";
-const PRODUCT_NAME = "Nodak Demand Packet Review Portal";
+const COMPANY_NAME = "Spej";
+const PRODUCT_NAME = "Spej Demand Packet Review Portal";
 // Pulled from src/index.css design tokens — keep email branding in sync if
 // those primary/secondary HSL values change.
 const COLOR_NAVY = "#000b21";
@@ -38,7 +38,7 @@ const COLOR_MUTED = "#6b7280";
 const COLOR_BG = "#f5f7fb";
 // Header band is lighter than the page bg so the logo (which has dark text on
 // a transparent background) reads clearly. Was COLOR_NAVY originally, but the
-// Nodak logo's black text disappeared against navy.
+// Spej logo's black text disappeared against navy.
 const COLOR_HEADER_BG = "#eef2f8";
 
 type EmailActionType =
@@ -135,7 +135,7 @@ const COPY: Record<EmailActionType, { subject: string; heading: string; intro: s
     subject: "Confirm your email",
     heading: "Confirm your email",
     intro:
-      "Welcome to the Nodak Demand Packet Review Portal. To finish setting up your account, please confirm this email address.",
+      "Welcome to the Spej Demand Packet Review Portal. To finish setting up your account, please confirm this email address.",
     cta: "Confirm email",
     outro:
       "If you didn't create an account, you can safely ignore this message.",
@@ -144,7 +144,7 @@ const COPY: Record<EmailActionType, { subject: string; heading: string; intro: s
     subject: "Reset your password",
     heading: "Reset your password",
     intro:
-      "We received a request to reset the password on your Nodak Demand Packet Review Portal account. Click the button below to choose a new password.",
+      "We received a request to reset the password on your Spej Demand Packet Review Portal account. Click the button below to choose a new password.",
     cta: "Reset password",
     outro:
       "If you didn't request a password reset, you can safely ignore this message — your password will stay the same.",
@@ -153,15 +153,15 @@ const COPY: Record<EmailActionType, { subject: string; heading: string; intro: s
     subject: `You've been invited to ${PRODUCT_NAME}`,
     heading: "You've been invited",
     intro:
-      "An administrator has invited you to the Nodak Demand Packet Review Portal. Click the button below to accept and create your password.",
+      "An administrator has invited you to the Spej Demand Packet Review Portal. Click the button below to accept and create your password.",
     cta: "Accept invitation",
     outro: "If you weren't expecting this invitation, you can safely ignore it.",
   },
   magiclink: {
-    subject: "Sign in to the Nodak Review Portal",
+    subject: "Sign in to the Spej Review Portal",
     heading: "Sign in",
     intro:
-      "Click the button below to sign in to the Nodak Demand Packet Review Portal.",
+      "Click the button below to sign in to the Spej Demand Packet Review Portal.",
     cta: "Sign in",
     outro:
       "If you didn't request a sign-in link, you can safely ignore this message.",
@@ -185,7 +185,7 @@ const COPY: Record<EmailActionType, { subject: string; heading: string; intro: s
     subject: "Confirm your new email address",
     heading: "Confirm new email",
     intro:
-      "Please confirm that this is your new email address for the Nodak Demand Packet Review Portal.",
+      "Please confirm that this is your new email address for the Spej Demand Packet Review Portal.",
     cta: "Confirm new email",
     outro: "If you didn't request this change, contact your administrator.",
   },

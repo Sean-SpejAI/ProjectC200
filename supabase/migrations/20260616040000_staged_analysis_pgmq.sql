@@ -8,7 +8,7 @@
 -- means no single invocation approaches 400 s.
 --
 -- This migration is the INERT FOUNDATION. Nothing changes until BOTH:
---   (a) imageright_settings.staged_analysis_enabled = 'true', AND
+--   (a) sor_settings.staged_analysis_enabled = 'true', AND
 --   (b) analyze-claim-document ships its {stage} handler.
 -- Default OFF → the existing monolithic path stays the default and can't break.
 --
@@ -78,9 +78,9 @@ create or replace function public.analyze_stages_pump()
  set search_path to 'public'
 as $fn$
 declare
-  v_enabled text := public.imageright_setting('staged_analysis_enabled');
-  v_url     text := public.imageright_setting('analyze_document_url');
-  v_key     text := public.imageright_setting('service_role_key');
+  v_enabled text := public.sor_setting('staged_analysis_enabled');
+  v_url     text := public.sor_setting('analyze_document_url');
+  v_key     text := public.sor_setting('service_role_key');
   v_vt      int  := 600;  -- visibility timeout (s) > 400 s worker wall-clock
   v_batch   int  := 6;    -- max stage-dispatches per tick (in-flight cap)
   v_maxread int  := 4;    -- reads before dead-letter (a stage that keeps dying)
@@ -134,7 +134,7 @@ $cron$;
 -- functions below are the current definitions + an `analysis_stage IS NULL`
 -- filter. (Staged retries are handled by the pgmq pump's redelivery, not these.)
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION public.imageright_reset_zombie_processing()
+CREATE OR REPLACE FUNCTION public.sor_reset_zombie_processing()
  RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
 AS $function$
 DECLARE
@@ -156,7 +156,7 @@ BEGIN
              / length('watchdog_reset') >= v_max_resets
           THEN 'watchdog_gave_up: still not completing after repeated resets — marked failed so synthesis can proceed'
         ELSE 'watchdog_reset: was processing for >8min without completion' END
-  WHERE source IN ('imageright', 'manual')
+  WHERE source IN ('sor', 'manual')
     AND processing_status = 'processing'
     AND analysis_stage IS NULL                  -- skip staged docs (pump owns them)
     AND processing_started_at IS NOT NULL
@@ -164,12 +164,12 @@ BEGIN
 END;
 $function$;
 
-CREATE OR REPLACE FUNCTION public.imageright_redispatch_stuck_pending()
+CREATE OR REPLACE FUNCTION public.sor_redispatch_stuck_pending()
  RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
 AS $function$
 DECLARE
-  v_url        text := public.imageright_setting('analyze_document_url');
-  v_key        text := public.imageright_setting('service_role_key');
+  v_url        text := public.sor_setting('analyze_document_url');
+  v_key        text := public.sor_setting('service_role_key');
   v_manual_cap int  := 6;
   v_inflight   int;
   v_slots      int;
@@ -179,7 +179,7 @@ BEGIN
 
   FOR r IN
     SELECT id FROM claim_documents
-    WHERE source = 'imageright' AND processing_status = 'pending'
+    WHERE source = 'sor' AND processing_status = 'pending'
       AND analysis_stage IS NULL                -- skip staged docs
       AND uploaded_at < now() - interval '10 minutes'
     ORDER BY uploaded_at ASC LIMIT 5

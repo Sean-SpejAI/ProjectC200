@@ -3,9 +3,9 @@
 // Two jobs:
 //  1. Resolve a stored citation string ("<file_name> p. N") to the right claim
 //     document — robustly, even when a claim has many identically-described
-//     ImageRight documents (we suffix file names with "[#docId]" so they're
+//     Sor documents (we suffix file names with "[#docId]" so they're
 //     unique; the AI cites that name).
-//  2. Render a LAYERED citation that mirrors ImageRight — folder › document
+//  2. Render a LAYERED citation that mirrors Sor — folder › document
 //     (page collection) › page — and a LINK that opens the backing PDF at the
 //     correct page.
 //
@@ -24,9 +24,9 @@ export interface CiteDoc {
   fileUrl?: string | null;
   /** Original-document page where this slice starts (from claim_details.page_start). Null/1 for non-split. */
   pageStart?: number | null;
-  /** ImageRight folder this document lives under (immediate parent). */
+  /** Sor folder this document lives under (immediate parent). */
   folderName?: string | null;
-  /** Short ImageRight type code (e.g. "BIDO"); used only as supplemental context. */
+  /** Short Sor type code (e.g. "BIDO"); used only as supplemental context. */
   documentTypeCode?: string | null;
   /** Human document type (ObjType.Description, e.g. "Report"); used as the label when the file has no custom name. */
   documentType?: string | null;

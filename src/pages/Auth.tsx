@@ -113,8 +113,8 @@ export default function Auth() {
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="w-full max-w-md">
           <div className="text-center mb-8">
-            <img src="/logo.png" alt="Nodak Insurance" className="h-16 w-auto mx-auto mb-4" />
-            <h1 className="text-headline-md text-primary">Nodak Demand Packet Review Portal</h1>
+            <img src="/logo.png" alt="Spej" className="h-16 w-auto mx-auto mb-4" />
+            <h1 className="text-headline-md text-primary">Spej Demand Packet Review Portal</h1>
             <p className="text-body-md text-on-surface-variant mt-1">Check your email to continue</p>
           </div>
           <Card className="p-6 bg-surface-container-lowest border-outline-variant shadow-elevation-1 rounded-2xl space-y-4">
@@ -135,7 +135,7 @@ export default function Auth() {
               <div className="flex items-start gap-2">
                 <Icon name="info" size={16} filled className="text-warning mt-0.5 shrink-0" />
                 <p>
-                  <strong>One more step after that:</strong> a Nodak administrator must approve your
+                  <strong>One more step after that:</strong> a Spej administrator must approve your
                   account and assign a role before you can use the portal. You'll be held at a
                   pending-approval screen on first sign-in until that happens.
                 </p>
@@ -166,8 +166,8 @@ export default function Auth() {
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <img src="/logo.png" alt="Nodak Insurance" className="h-16 w-auto mx-auto mb-4" />
-          <h1 className="text-headline-md text-primary">Nodak Demand Packet Review Portal</h1>
+          <img src="/logo.png" alt="Spej" className="h-16 w-auto mx-auto mb-4" />
+          <h1 className="text-headline-md text-primary">Spej Demand Packet Review Portal</h1>
           <p className="text-body-md text-on-surface-variant mt-1">Internal Document Review System</p>
         </div>
         <Card className="p-6 bg-surface-container-lowest border-outline-variant shadow-elevation-1 rounded-2xl">
@@ -195,7 +195,7 @@ export default function Auth() {
               <Input
                 id="email"
                 type="email"
-                placeholder="john.smith@nodakins.com"
+                placeholder="john.smith@spej.ai"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 className={errors.email ? "border-destructive" : ""}
@@ -264,7 +264,7 @@ export default function Auth() {
           </div>
         </Card>
         <p className="text-xs text-on-surface-variant text-center mt-6">
-          For authorized Nodak Insurance personnel only.
+          For authorized Spej personnel only.
           <br />
           Contact IT support if you need access.
         </p>

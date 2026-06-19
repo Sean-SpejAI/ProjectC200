@@ -14,7 +14,7 @@
 openapi: 3.0.3
 
 info:
-  title: Nodak Claims Analyzer — Edge Functions
+  title: Spej Claims Analyzer — Edge Functions
   version: "1.0.0"
   description: |
     OpenAPI surface for ZAP API scanning. The {ref} server variable is
@@ -58,12 +58,12 @@ components:
           type: string
     FetchDocRequest:
       type: object
-      required: [documentId, imageright_document_id, claimId]
+      required: [documentId, sor_document_id, claimId]
       properties:
         documentId:
           type: string
           format: uuid
-        imageright_document_id:
+        sor_document_id:
           type: integer
         claimId:
           type: string
@@ -184,9 +184,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/Empty"
 
-  /reload-claim-from-imageright:
+  /reload-claim-from-sor:
     post:
-      summary: Admin — pull a single claim from ImageRight by claimId or claimNumber.
+      summary: Admin — pull a single claim from Sor by claimId or claimNumber.
       requestBody:
         required: true
         content:
@@ -259,9 +259,9 @@ paths:
   # Internal endpoints — publicly addressable (verify_jwt=false) but
   # protected by code-level checks + scanner-guard short-circuit.
   # ---------------------------------------------------------------------
-  /imageright-sync:
+  /sor-sync:
     post:
-      summary: Internal — orchestrates a date-range or daily-diff ImageRight pull.
+      summary: Internal — orchestrates a date-range or daily-diff Sor pull.
       requestBody:
         required: false
         content:
@@ -276,7 +276,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Empty"
 
-  /fetch-imageright-document:
+  /fetch-sor-document:
     post:
       summary: Internal — fetch one document's PDF and upload to storage.
       requestBody:

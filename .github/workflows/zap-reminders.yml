@@ -51,7 +51,7 @@ jobs:
               ``,
               `- TOTP rotation for \`zap-scanner+{dev,stage,prod}@spej.ai\` (quarterly cadence).`,
               `- Vertex AI quota investigation for the per-claim Gemini rate limits seen on Dev.`,
-              `- pg_cron install on Dev (so the daily-diff ImageRight sync runs without manual triggers).`,
+              `- pg_cron install on Dev (so the daily-diff Sor sync runs without manual triggers).`,
               `- Consider GitHub Advanced Security so SARIF lands in the Security tab instead of just artifacts.`,
               ``,
               `---`,

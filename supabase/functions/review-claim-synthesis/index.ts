@@ -85,7 +85,7 @@ serve(async (req) => {
 
   const { data: docRows, error: docsErr } = await supabase
     .from("claim_documents")
-    .select("imageright_document_id, document_type, ai_analysis")
+    .select("sor_document_id, document_type, ai_analysis")
     .eq("claim_id", claimId)
     .in("processing_status", ["completed", "needs_review"]);
   if (docsErr) {
@@ -95,7 +95,7 @@ serve(async (req) => {
   }
 
   const docs: PerDocAnalysis[] = (docRows ?? []).map((r) => ({
-    doc_id: String(r.imageright_document_id ?? ""),
+    doc_id: String(r.sor_document_id ?? ""),
     document_type: r.document_type as string | null,
     ai_analysis: (r.ai_analysis ?? null) as Record<string, unknown> | null,
   }));

@@ -5,7 +5,7 @@
 -- History: 20260609010000_raise_claim_documents_bucket_size.sql raised the
 -- `claim-documents` bucket to 300 MB, but the project's global limit stayed at
 -- its 50 MB default. So every upload was silently capped at 50 MB — manual
--- uploads AND server-side ImageRight ingestion alike (no document over 50 MB
+-- uploads AND server-side Sor ingestion alike (no document over 50 MB
 -- had ever made it into storage). Discovered 2026-06-14 when a 208 MB manual
 -- upload failed with "The object exceeded the maximum allowed size".
 --

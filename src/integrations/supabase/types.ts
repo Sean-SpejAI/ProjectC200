@@ -32,16 +32,16 @@ export type Database = {
           file_url: string
           grounding_status: string
           id: string
-          imageright_document_date: string | null
-          imageright_document_id: number | null
-          imageright_document_type_code: string | null
-          imageright_folder_id: number | null
-          imageright_folder_name: string | null
-          imageright_folder_path: Json | null
-          imageright_page_count: number | null
-          imageright_pages: Json | null
-          imageright_processing_tier: string | null
-          imageright_removed_at: string | null
+          sor_document_date: string | null
+          sor_document_id: number | null
+          sor_document_type_code: string | null
+          sor_folder_id: number | null
+          sor_folder_name: string | null
+          sor_folder_path: Json | null
+          sor_page_count: number | null
+          sor_pages: Json | null
+          sor_processing_tier: string | null
+          sor_removed_at: string | null
           mime_type: string | null
           processing_error: string | null
           processing_started_at: string | null
@@ -66,16 +66,16 @@ export type Database = {
           file_url: string
           grounding_status?: string
           id?: string
-          imageright_document_date?: string | null
-          imageright_document_id?: number | null
-          imageright_document_type_code?: string | null
-          imageright_folder_id?: number | null
-          imageright_folder_name?: string | null
-          imageright_folder_path?: Json | null
-          imageright_page_count?: number | null
-          imageright_pages?: Json | null
-          imageright_processing_tier?: string | null
-          imageright_removed_at?: string | null
+          sor_document_date?: string | null
+          sor_document_id?: number | null
+          sor_document_type_code?: string | null
+          sor_folder_id?: number | null
+          sor_folder_name?: string | null
+          sor_folder_path?: Json | null
+          sor_page_count?: number | null
+          sor_pages?: Json | null
+          sor_processing_tier?: string | null
+          sor_removed_at?: string | null
           mime_type?: string | null
           processing_error?: string | null
           processing_started_at?: string | null
@@ -100,16 +100,16 @@ export type Database = {
           file_url?: string
           grounding_status?: string
           id?: string
-          imageright_document_date?: string | null
-          imageright_document_id?: number | null
-          imageright_document_type_code?: string | null
-          imageright_folder_id?: number | null
-          imageright_folder_name?: string | null
-          imageright_folder_path?: Json | null
-          imageright_page_count?: number | null
-          imageright_pages?: Json | null
-          imageright_processing_tier?: string | null
-          imageright_removed_at?: string | null
+          sor_document_date?: string | null
+          sor_document_id?: number | null
+          sor_document_type_code?: string | null
+          sor_folder_id?: number | null
+          sor_folder_name?: string | null
+          sor_folder_path?: Json | null
+          sor_page_count?: number | null
+          sor_pages?: Json | null
+          sor_processing_tier?: string | null
+          sor_removed_at?: string | null
           mime_type?: string | null
           processing_error?: string | null
           processing_started_at?: string | null

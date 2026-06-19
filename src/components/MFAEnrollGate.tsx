@@ -27,7 +27,7 @@ export function MFAEnrollGate({ onComplete }: MFAEnrollGateProps) {
     <div className="min-h-screen bg-background flex flex-col">
       <header className="flex justify-between items-center px-6 py-4 border-b border-outline-variant bg-surface">
         <div className="flex items-center gap-3">
-          <img src="/logo.png" alt="Nodak Insurance" className="h-9 w-auto" />
+          <img src="/logo.png" alt="Spej" className="h-9 w-auto" />
           <div>
             <p className="text-label-md text-on-surface-variant uppercase tracking-widest">
               Account security

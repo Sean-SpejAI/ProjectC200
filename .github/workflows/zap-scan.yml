@@ -3,7 +3,7 @@ name: ZAP Active Scan (dev/stage/prod)
 # Active (full) ZAP scan plus API scan. Sends injection payloads, so this
 # runs only on `workflow_dispatch` against a chosen environment. The
 # scanner-guard short-circuit in side-effecting Edge Functions prevents
-# ImageRight pulls, Resend mail, and Vertex AI calls during the scan.
+# Sor pulls, Resend mail, and Vertex AI calls during the scan.
 #
 # Prerequisites per environment (set under Settings → Environments):
 #   ZAP_USER_EMAIL_<ENV>

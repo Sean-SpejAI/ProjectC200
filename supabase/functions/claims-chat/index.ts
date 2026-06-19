@@ -30,7 +30,7 @@ interface ChatRequest {
 const MODEL = "gemini-2.5-flash";
 
 function buildSystemPrompt(claimContext?: ChatRequest["claimContext"]): string {
-  let prompt = `You are a helpful claims processing assistant for Nodak Insurance Company. You help the claims team review bodily injury claims by:
+  let prompt = `You are a helpful claims processing assistant for Spej. You help the claims team review bodily injury claims by:
 
 1. Answering questions about claims and documents
 2. Explaining medical terminology and billing codes

@@ -22,7 +22,7 @@ on:
         required: true
         type: string
       preview_url:
-        description: "Full preview URL to scan (e.g. https://nodakclaimsanalyzer-xxx-nodak-insurance.vercel.app)"
+        description: "Full preview URL to scan (e.g. https://your-app-preview.vercel.app)"
         required: true
         type: string
 

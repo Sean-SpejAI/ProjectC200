@@ -9,22 +9,22 @@
 --      their catch block can mark the doc 'failed' — leaving 'processing' with
 --      no error and no recovery.
 --
---   2. imageright_reset_zombie_processing — the watchdog that resets docs stuck
---      in 'processing' — only matched source='imageright'. Manually-uploaded
+--   2. sor_reset_zombie_processing — the watchdog that resets docs stuck
+--      in 'processing' — only matched source='sor'. Manually-uploaded
 --      docs were never rescued, so they stayed 'processing' indefinitely. (The
 --      *pending* watchdog was already broadened to 'manual' in
 --      20260613000000; this 'processing' one was missed.)
 --
 -- This migration fixes the recovery + concurrency at the DB/watchdog layer
 -- (process-uploaded-claim is updated separately to stop the initial stampede):
---   - reset-zombie-processing now covers 'manual' as well as 'imageright';
+--   - reset-zombie-processing now covers 'manual' as well as 'sor';
 --   - redispatch now bounds MANUAL analyze jobs to a concurrency cap so a large
 --     claim drains a few documents at a time instead of all at once. The
---     ImageRight path (small, server-streamed docs) keeps its original
+--     Sor path (small, server-streamed docs) keeps its original
 --     behaviour.
 
 -- 1) Rescue stuck 'processing' docs for manual uploads too.
-CREATE OR REPLACE FUNCTION public.imageright_reset_zombie_processing()
+CREATE OR REPLACE FUNCTION public.sor_reset_zombie_processing()
  RETURNS void
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -37,7 +37,7 @@ BEGIN
       processing_error = COALESCE(processing_error, '') ||
         CASE WHEN COALESCE(processing_error, '') = '' THEN '' ELSE ' | ' END ||
         'watchdog_reset: was processing for >30min without completion'
-  WHERE source IN ('imageright', 'manual')
+  WHERE source IN ('sor', 'manual')
     AND processing_status = 'processing'
     AND processing_started_at IS NOT NULL
     AND processing_started_at < now() - interval '30 minutes';
@@ -46,15 +46,15 @@ $function$;
 
 -- 2) Redispatch pending docs, but cap MANUAL concurrency so big files never
 --    stampede the workers.
-CREATE OR REPLACE FUNCTION public.imageright_redispatch_stuck_pending()
+CREATE OR REPLACE FUNCTION public.sor_redispatch_stuck_pending()
  RETURNS void
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
 DECLARE
-  v_url        text := public.imageright_setting('analyze_document_url');
-  v_key        text := public.imageright_setting('service_role_key');
+  v_url        text := public.sor_setting('analyze_document_url');
+  v_key        text := public.sor_setting('service_role_key');
   v_manual_cap int  := 3;     -- max manual analyze jobs in flight at once
   v_inflight   int;
   v_slots      int;
@@ -64,12 +64,12 @@ BEGIN
     RETURN;
   END IF;
 
-  -- ImageRight docs are small and streamed server-side — keep the original
+  -- Sor docs are small and streamed server-side — keep the original
   -- behaviour (up to 5 stale-pending docs per run, oldest first).
   FOR r IN
     SELECT id
     FROM claim_documents
-    WHERE source = 'imageright'
+    WHERE source = 'sor'
       AND processing_status = 'pending'
       AND uploaded_at < now() - interval '10 minutes'
     ORDER BY uploaded_at ASC

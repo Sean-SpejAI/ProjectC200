@@ -13,24 +13,24 @@ verify_enabled = true
 [functions.send-email]
 verify_jwt = false
 
-# pg_cron invokes imageright-sync with the service-role bearer; that's not a
+# pg_cron invokes sor-sync with the service-role bearer; that's not a
 # user JWT, so disable verification. The function checks for the service role
 # implicitly by requiring admin credentials only when called from the UI path.
-[functions.imageright-sync]
+[functions.sor-sync]
 verify_jwt = false
 
-# Invoked internally by imageright-pull-claim and the imageright-sync sweep
+# Invoked internally by sor-pull-claim and the sor-sync sweep
 # with the project's service-role secret. Supabase rotated
 # SUPABASE_SERVICE_ROLE_KEY to the new sb_secret_* short-form key (length 41),
 # which the platform verify_jwt check rejects as "Invalid JWT". The function
 # is never publicly addressable — inputs are an already-existing
 # claim_documents row id plus the IR document id.
-[functions.fetch-imageright-document]
+[functions.fetch-sor-document]
 verify_jwt = false
 
-# Invoked internally by imageright-pull-claim (per-doc after PDF upload) and
-# by imageright-sync's pending-content sweep. Same SUPABASE_SERVICE_ROLE_KEY
-# JWT-format problem as fetch-imageright-document. No frontend caller exists
+# Invoked internally by sor-pull-claim (per-doc after PDF upload) and
+# by sor-sync's pending-content sweep. Same SUPABASE_SERVICE_ROLE_KEY
+# JWT-format problem as fetch-sor-document. No frontend caller exists
 # (the React app never invokes analyze-claim-document directly), so disabling
 # verify_jwt is safe — the function reads documentId from the body and uses
 # its own service-role client for DB writes.
@@ -43,34 +43,34 @@ verify_jwt = false
 [functions.synthesize-claim-extraction]
 verify_jwt = false
 
-# Admin-only batch recovery for ImageRight docs with file_url=NULL (source
+# Admin-only batch recovery for Sor docs with file_url=NULL (source
 # records that had zero pages at original sync time). Run manually via curl
 # with the service-role key. The function enforces auth itself by comparing
 # the Authorization bearer to SUPABASE_SERVICE_ROLE_KEY — verify_jwt=false at
 # the platform layer because the new sb_secret_* short-form key isn't a JWT.
-[functions.recover-empty-imageright-docs]
+[functions.recover-empty-sor-docs]
 verify_jwt = false
 
 # Service-role-callable bulk claim pull by claim_number. Same logic as
-# reload-claim-from-imageright but without the user-JWT requirement, so
+# reload-claim-from-sor but without the user-JWT requirement, so
 # operators can pull a batch via curl. Same in-function service-role bearer
 # check.
 [functions.admin-pull-claims-by-number]
 verify_jwt = false
 
-# Service-role-callable diagnostic: full ImageRight file inventory (every
+# Service-role-callable diagnostic: full Sor file inventory (every
 # folder + document, including deleted/cut, with delete state) by claim_number
 # or file_id. Same in-function service-role bearer check as the other admin
 # functions; verify_jwt=false because the sb_secret_* key isn't a JWT.
-[functions.admin-inspect-imageright-file]
+[functions.admin-inspect-sor-file]
 verify_jwt = false
 
 # Service-role-callable diagnostic: environment presence probe by claim_number —
-# is the claim's document data actually present in the ImageRight environment we
+# is the claim's document data actually present in the Sor environment we
 # connect to? Combines our recursive pull path with an independent FindDocumentsEx
 # search + AvailableConnections, returns a verdict. Same in-function service-role
 # bearer check; verify_jwt=false because the sb_secret_* key isn't a JWT.
-[functions.admin-probe-imageright-claim]
+[functions.admin-probe-sor-claim]
 verify_jwt = false
 
 # Fires after synthesize-claim-extraction completes for a claim: gap-fill

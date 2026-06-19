@@ -56,7 +56,7 @@ jobs:
         # `--include-all` applies any local migration whose version isn't
         # already in supabase_migrations.schema_migrations, even when it
         # predates an already-applied migration. We need this because the
-        # ImageRight integration migrations (20260518021407, 20260522140000)
+        # Sor integration migrations (20260518021407, 20260522140000)
         # were intentionally Dev-only at first, then promoted later. Without
         # this flag the CLI refuses to insert them and the deploy fails.
         run: supabase db push --include-all

@@ -312,7 +312,7 @@ export function FieldQualityBadge({
 }
 
 // Pill shown on documents that are awaiting their binary content from
-// ImageRight. Today this is the dominant state for IR-sourced docs because
+// System of Record. Today this is the dominant state for SOR-sourced docs because
 // the spejai service account lacks View Image permission; the daily diff
 // retries until content lands.
 export function PendingContentBadge({ className }: { className?: string }) {
@@ -329,13 +329,13 @@ export function PendingContentBadge({ className }: { className?: string }) {
             )}
           >
             <Icon name="cloud_off" size={14} />
-            Awaiting ImageRight content
+            Awaiting System of Record content
           </Badge>
         </TooltipTrigger>
         <TooltipContent side="top" className="max-w-[260px]">
           <p className="text-xs font-medium mb-1">Pending content</p>
           <p className="text-xs text-on-surface-variant">
-            The document metadata has been pulled from ImageRight, but the binary file is not yet available.
+            The document metadata has been pulled from System of Record, but the binary file is not yet available.
             The daily diff will retry the fetch automatically.
           </p>
         </TooltipContent>

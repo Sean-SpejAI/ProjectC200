@@ -53,13 +53,13 @@ export function BackupCodesDisplay({
 
   const downloadTxt = () => {
     if (!codes) return;
-    const header = "Nodak Demand Packet Review Portal — backup codes\nGenerated " + new Date().toISOString() + "\n\n";
+    const header = "Spej Demand Packet Review Portal — backup codes\nGenerated " + new Date().toISOString() + "\n\n";
     const body = codes.join("\n") + "\n";
     const blob = new Blob([header + body], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "nodak-backup-codes.txt";
+    a.download = "spej-backup-codes.txt";
     a.click();
     URL.revokeObjectURL(url);
   };

@@ -1,10 +1,10 @@
 -- Make the staged pgmq pipeline the PRIMARY analysis dispatcher (flag-gated).
 --
--- The Edge routing (imageright-pull-claim, imageright-sync sweep,
+-- The Edge routing (sor-pull-claim, sor-sync sweep,
 -- process-uploaded-claim) now calls analyze_stages_enqueue_if_idle when
 -- staged_analysis_enabled='true'. This migration completes the DB side:
 --   1) pump batch size is tunable live via the `pump_batch` setting (default 8)
---      so a big nightly ImageRight sync can be sped up without a redeploy;
+--      so a big nightly Sor sync can be sped up without a redeploy;
 --   2) the stuck-pending watchdog promotes not-yet-staged 'pending' docs INTO
 --      the staged pipeline (instead of the monolith) when the flag is on — the
 --      safety net for any doc whose immediate enqueue was missed;
@@ -24,11 +24,11 @@ create or replace function public.analyze_stages_pump()
  set search_path to 'public'
 as $fn$
 declare
-  v_enabled text := public.imageright_setting('staged_analysis_enabled');
-  v_url     text := public.imageright_setting('analyze_document_url');
-  v_key     text := public.imageright_setting('service_role_key');
+  v_enabled text := public.sor_setting('staged_analysis_enabled');
+  v_url     text := public.sor_setting('analyze_document_url');
+  v_key     text := public.sor_setting('service_role_key');
   v_vt      int  := 600;  -- visibility timeout (s) > 400 s worker wall-clock
-  v_batch   int  := coalesce(nullif(public.imageright_setting('pump_batch'), '')::int, 8);
+  v_batch   int  := coalesce(nullif(public.sor_setting('pump_batch'), '')::int, 8);
   v_maxread int  := 4;    -- reads before dead-letter (a stage that keeps dying)
   r         record;
 begin
@@ -82,13 +82,13 @@ $fn$;
 -- 2) Watchdog: when staged, promote not-yet-staged 'pending' docs into the
 --    pump (enqueue_if_idle) instead of dispatching the monolith. Keeps the
 --    analysis_stage IS NULL filter so staged docs stay owned by the pump.
-create or replace function public.imageright_redispatch_stuck_pending()
+create or replace function public.sor_redispatch_stuck_pending()
  returns void language plpgsql security definer set search_path to 'public'
 as $function$
 declare
-  v_staged     boolean := public.imageright_setting('staged_analysis_enabled') is not distinct from 'true';
-  v_url        text := public.imageright_setting('analyze_document_url');
-  v_key        text := public.imageright_setting('service_role_key');
+  v_staged     boolean := public.sor_setting('staged_analysis_enabled') is not distinct from 'true';
+  v_url        text := public.sor_setting('analyze_document_url');
+  v_key        text := public.sor_setting('service_role_key');
   v_manual_cap int  := 6;
   v_inflight   int;
   v_slots      int;
@@ -97,10 +97,10 @@ begin
   -- Monolith dispatch needs url+key; the staged path uses the enqueue RPC.
   if not v_staged and (v_url is null or v_key is null) then return; end if;
 
-  -- ImageRight: stale-pending docs not yet in the staged pipeline.
+  -- Sor: stale-pending docs not yet in the staged pipeline.
   for r in
     select id from claim_documents
-    where source = 'imageright' and processing_status = 'pending'
+    where source = 'sor' and processing_status = 'pending'
       and analysis_stage is null
       and uploaded_at < now() - interval '10 minutes'
     order by uploaded_at asc limit 5
@@ -162,7 +162,7 @@ create or replace function public.analyze_stages_backstop()
  set search_path to 'public'
 as $fn$
 declare
-  v_enabled text := public.imageright_setting('staged_analysis_enabled');
+  v_enabled text := public.sor_setting('staged_analysis_enabled');
   r         record;
 begin
   if v_enabled is distinct from 'true' then return; end if;  -- inert pre-cutover / on rollback

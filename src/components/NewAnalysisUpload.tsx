@@ -278,7 +278,7 @@ export function NewAnalysisUpload({ onGoToQueue }: NewAnalysisUploadProps) {
           <h1 className="text-headline-md text-primary">New Analysis</h1>
           <p className="text-body-md text-on-surface-variant mt-1">
             Enter the claimant and claim number, add one or more PDF files, then process them. The documents run
-            through the same analysis as ImageRight claims and appear in the Review Queue.
+            through the same analysis as System of Record claims and appear in the Review Queue.
           </p>
         </div>
 

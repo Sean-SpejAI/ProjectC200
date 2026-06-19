@@ -6,7 +6,7 @@
 // On save we deep-diff the submitted analysis against the stored one, write one
 // claim_field_audit row per changed leaf field (changed_by = the user, kind =
 // 'human'), persist the new ai_synthesis, set status='in_review', and stamp
-// synthesis_human_edited_at/by — which is the signal that gates ImageRight
+// synthesis_human_edited_at/by — which is the signal that gates Sor
 // reconciliation (it must wait for approval once a human has edited).
 //
 // Auth: caller must be authenticated AND hold a staff role (admin /

@@ -3,7 +3,7 @@
 // Scanner workflows inject an `x-scanner-run` header on every request. When
 // the value matches the `SCANNER_TOKEN` Edge Function env var, side-effecting
 // functions return a synthetic 200 and skip the real work — so scans can
-// exercise auth + input-validation surface without triggering ImageRight
+// exercise auth + input-validation surface without triggering Sor
 // pulls, Resend emails, or Vertex AI calls.
 //
 // The guard is INERT in environments where `SCANNER_TOKEN` isn't set, so

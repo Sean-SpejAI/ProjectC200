@@ -285,7 +285,7 @@ export const EXTRACTION_SCHEMA: Record<string, FieldDefinition> = {
   // landed in EXTRACTION_SCHEMA they were ALSO missing from
   // buildResponseSchema() — Gemini stripped them from structured output and
   // they never made it to ai_analysis. See
-  // docs/2026-06-10-ImageRight-Attribute-Discovery.md for the diagnostic
+  // docs/2026-06-10-Sor-Attribute-Discovery.md for the diagnostic
   // trail.
   //
   // `requiredForTypes` is scoped narrowly so we don't ding e.g. a medical

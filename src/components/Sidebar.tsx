@@ -3,7 +3,6 @@ import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import spejLogo from "@/assets/spej-logo.png";
 
 interface SidebarProps {
   activeView: "analyze" | "upload" | "queue" | "completed" | "logic";
@@ -87,9 +86,9 @@ export function Sidebar({ activeView, onViewChange, onNewAnalysis }: SidebarProp
       {/* Brand */}
       <div className="px-6 mb-8">
         <div className="flex items-center gap-3">
-          <img src="/favicon.png" alt="Nodak Insurance" className="w-10 h-10 rounded-lg object-contain" />
+          <img src="/favicon.png" alt="Spej" className="w-10 h-10 rounded-lg object-contain" />
           <div>
-            <h1 className="text-headline-sm text-primary leading-tight">Nodak Claims</h1>
+            <h1 className="text-headline-sm text-primary leading-tight">Spej Claims</h1>
             <p className="text-label-md text-on-surface-variant opacity-70">Internal Review Portal</p>
           </div>
         </div>
@@ -130,17 +129,6 @@ export function Sidebar({ activeView, onViewChange, onNewAnalysis }: SidebarProp
           <span className="flex-grow text-left">Settings</span>
         </button>
 
-        <div className="px-4 py-4 mt-2">
-          <p className="text-[10px] text-outline mb-2 uppercase font-bold tracking-widest">Powered by</p>
-          <a
-            href="https://www.spej.ai"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-block transition-opacity hover:opacity-100"
-          >
-            <img src={spejLogo} alt="SPEJ" className="h-5 w-auto opacity-80 hover:opacity-100" />
-          </a>
-        </div>
       </div>
     </aside>
   );

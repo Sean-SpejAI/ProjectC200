@@ -196,11 +196,11 @@ async function resplitDocument(
   // Slice the parent's per-page manifest onto each child so per-page tree links
   // keep working after a split. The rendered pages (in PDF order) align 1:1 with
   // the source PDF pages we copy; only attach when the manifest is complete to
-  // avoid mis-mapping. Entries keep their absolute `n` (ImageRight page number).
-  const parentPages = Array.isArray(doc.imageright_pages) ? (doc.imageright_pages as any[]) : [];
+  // avoid mis-mapping. Entries keep their absolute `n` (Sor page number).
+  const parentPages = Array.isArray(doc.sor_pages) ? (doc.sor_pages as any[]) : [];
   const renderedParentPages = parentPages.filter((p) => p && p.rendered);
   const pageManifestAligned = renderedParentPages.length === totalPages;
-  const childTier = (doc.imageright_processing_tier as string | null) ?? null;
+  const childTier = (doc.sor_processing_tier as string | null) ?? null;
 
   const rows: any[] = [];
   for (let i = 0; i < numPieces; i++) {
@@ -233,8 +233,8 @@ async function resplitDocument(
       processing_status: 'pending',
       // Carry the page manifest slice + tier so split children stay
       // self-describing (per-page links) and inherit the parent's processing tier.
-      imageright_pages: pageManifestAligned ? renderedParentPages.slice(startIdx, endIdx) : null,
-      imageright_processing_tier: childTier,
+      sor_pages: pageManifestAligned ? renderedParentPages.slice(startIdx, endIdx) : null,
+      sor_processing_tier: childTier,
       claim_details: {
         original_file_name: parentDetails.original_file_name ?? doc.file_name,
         page_start: origStart,
@@ -272,7 +272,7 @@ async function resplitDocument(
 // 1:1 replacement — one doc out, one doc in — so steady-state in-flight stays
 // at the concurrency cap with no overshoot; the watchdog remains the backstop
 // (for workers that die before chaining) and enforces the actual ceiling.
-// Scoped to source='manual' so the ImageRight path keeps its own batched pacing.
+// Scoped to source='manual' so the Sor path keeps its own batched pacing.
 // Fire-and-forget; never throws.
 async function chainNextManualSibling(
   supabase: ReturnType<typeof getSupabaseAdmin>,
@@ -352,7 +352,7 @@ async function runAnalysisStage(documentId: string, stage: string, msgId?: numbe
   try {
     const { data: doc, error } = await supabase
       .from('claim_documents')
-      .select('id, claim_id, source, file_name, file_url, file_size, mime_type, document_type, document_classifications, claim_details, ai_analysis_raw, analysis_stage, imageright_pages, imageright_processing_tier')
+      .select('id, claim_id, source, file_name, file_url, file_size, mime_type, document_type, document_classifications, claim_details, ai_analysis_raw, analysis_stage, sor_pages, sor_processing_tier')
       .eq('id', documentId)
       .maybeSingle();
     if (error || !doc) throw new Error(`load failed: ${error?.message ?? 'not found'}`);
@@ -372,7 +372,7 @@ async function runAnalysisStage(documentId: string, stage: string, msgId?: numbe
 
     const fileUrl = (doc.file_url as string | null) ?? undefined;
     // file_url is a BARE storage path (private bucket; PR #117). Use the shared
-    // helper so both bare paths ("imageright/…", "manual/…") and any legacy full
+    // helper so both bare paths ("sor/…", "manual/…") and any legacy full
     // public/sign URLs resolve. (The old /claim-documents\/(.+)/ regex returned
     // undefined for bare paths, which made performAnalysis fall through to
     // fetch(barePath) → "Invalid URL" and stalled every staged doc.)
@@ -411,11 +411,11 @@ async function runAnalysisStage(documentId: string, stage: string, msgId?: numbe
       }
       // Persist the Pass-1 result + the extracted-text structure for later stages.
       await extractAndPersistText(documentId, result, 0);
-      // Type-aware depth: low-value ImageRight docs (declarations, statements,
+      // Type-aware depth: low-value Sor docs (declarations, statements,
       // routine correspondence) skip the enrich gap-fill AND grounding — extract
       // is enough. They still produce ai_analysis (finalized in 'ground') so they
       // feed claim synthesis, just shallower. Full-tier docs take the full path.
-      const tier = (doc.imageright_processing_tier as string | null) ?? 'full';
+      const tier = (doc.sor_processing_tier as string | null) ?? 'full';
       const nextStage = tier === 'light' ? 'ground' : 'enrich';
       await supabase.from('claim_documents')
         .update({ ai_analysis_raw: result, analysis_stage: nextStage })
@@ -477,7 +477,7 @@ async function runAnalysisStage(documentId: string, stage: string, msgId?: numbe
       // scans (this is what looped the staged-test ground stage). Extraction
       // (Pass 1-4, already persisted) is the valuable part; grounding is a
       // quality check we forgo on the extreme chunks.
-      const tier = (doc.imageright_processing_tier as string | null) ?? 'full';
+      const tier = (doc.sor_processing_tier as string | null) ?? 'full';
       const groundingSkippedLight = tier === 'light';
       const groundingEnabled = Deno.env.get('ENABLE_ANTHROPIC_GROUNDING') === 'true';
       const groundingTooBig = (doc.file_size ?? 0) > 18 * 1024 * 1024;
@@ -555,7 +555,7 @@ async function runAnalysisStage(documentId: string, stage: string, msgId?: numbe
 }
 
 // maybeFireSynthesis now lives in ../_shared/fire-synthesis.ts (shared with the
-// reconcile path in imageright-pull-claim), imported above.
+// reconcile path in sor-pull-claim), imported above.
 
 // ============================================================================
 // DATABASE OPERATIONS
@@ -1303,7 +1303,7 @@ async function performAnalysis(
       }
 
       logStep(3, TOTAL_STEPS, 'ANALYSIS', 'Uploading PDF to GCS');
-      gcsObjectName = `imageright/${crypto.randomUUID()}-${fileName.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+      gcsObjectName = `sor/${crypto.randomUUID()}-${fileName.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
       gcsUri = await uploadPdfToGcs(fileBuffer, gcsObjectName);
     } else if (HAS_VERTEX_AI || fileSize <= GEMINI_FILE_API_THRESHOLD) {
       log('INFO', 'ANALYSIS', '📄 Using inline PDF');
@@ -1554,7 +1554,7 @@ serve(async (req) => {
           const doc = await loadDocumentFromDatabase(documentId);
 
           // Defensive: claim_documents rows can have file_url=NULL when
-          // fetch-imageright-document failed to retrieve the PDF (proxy
+          // fetch-sor-document failed to retrieve the PDF (proxy
           // 403/404, content_unavailable, etc). Without this check the
           // `.match()` below crashes with "Cannot read properties of null".
           // Mark the doc as failed with a clear message and bail — there's
@@ -2083,7 +2083,7 @@ serve(async (req) => {
           const errorCode = error instanceof Error ? getErrorCode(error) : 'UNKNOWN';
 
           // Rate-limit / 503 / timeout are recoverable — keep the doc in
-          // `pending` so the watchdog (imageright_redispatch_stuck_pending)
+          // `pending` so the watchdog (sor_redispatch_stuck_pending)
           // re-fires analyze later. Marking these `failed` would silently
           // bury them (the daily-diff sweep only retries pending_content).
           const retryableCodes: string[] = [

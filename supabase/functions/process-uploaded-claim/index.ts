@@ -97,18 +97,18 @@ serve(async (req: Request): Promise<Response> => {
     .in("synthesis_status", ["not_run", "pending"]);
 
   // Kick off only the first few documents (smallest first). The rest stay
-  // 'pending'; the concurrency-capped imageright_redispatch_stuck_pending
+  // 'pending'; the concurrency-capped sor_redispatch_stuck_pending
   // watchdog tops the in-flight count back up every few minutes until the
   // backlog drains. This is what prevents a big claim from OOM-killing the
   // analyze workers by starting all of its documents at once.
-  // Matches the manual concurrency cap in imageright_redispatch_stuck_pending
+  // Matches the manual concurrency cap in sor_redispatch_stuck_pending
   // (6). Workers only ever see <=25 MB pre-split chunks now, so starting 6 at
   // once is safe (the old 200-280 MB whole-file OOM risk is gone). Each doc also
   // chains its next sibling on completion, so the claim then drains continuously.
   // STAGED on: enqueue ALL pending up front — the pump's batch cap paces the
   // in-flight work (queued != in-flight), so there's no OOM risk. STAGED off
   // (monolith): fire only the first few (smallest first) and let the
-  // concurrency-capped imageright_redispatch_stuck_pending watchdog top the
+  // concurrency-capped sor_redispatch_stuck_pending watchdog top the
   // in-flight count back up; each doc also chains its next sibling on completion.
   const MAX_INITIAL_DISPATCH = 6;
   const allPending = docs ?? [];

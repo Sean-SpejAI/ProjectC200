@@ -3,7 +3,7 @@
 // Two PDF input paths are used by analyze-claim-document:
 //   1. inlineData (base64-encoded bytes in the request body) — for PDFs ≤ 5 MB.
 //   2. fileData.fileUri with a gs:// URI — for PDFs > 5 MB. The PDF is uploaded
-//      to a GCS bucket (`GCP_GCS_BUCKET`, default `nodak-claims-vertex-uploads`)
+//      to a GCS bucket (`GCP_GCS_BUCKET`, default `spej-claims-vertex-uploads`)
 //      that the Vertex AI service account has Object Admin on, then deleted
 //      after analysis. Arbitrary HTTPS URLs in fileData.fileUri are capped at
 //      15 MB by Vertex; gs:// allows up to 2 GB. We don't use the Google AI
@@ -14,7 +14,7 @@ import { GEMINI_PDF_INFERENCE_LIMIT, PRO_MODEL_THRESHOLD } from './types.ts';
 import { log, logTiming } from './utils.ts';
 import { getAccessToken, getProjectId, getRegion } from './vertex-auth.ts';
 
-const DEFAULT_GCS_BUCKET = 'nodak-claims-vertex-uploads';
+const DEFAULT_GCS_BUCKET = 'spej-claims-vertex-uploads';
 
 function getGcsBucket(): string {
   return Deno.env.get('GCP_GCS_BUCKET') || DEFAULT_GCS_BUCKET;
@@ -458,7 +458,7 @@ function parseClassifierResponse(raw: string): ClassificationEntry[] {
 /**
  * Pick the "primary" classification entry — the one with the largest page coverage.
  * Used to populate the legacy `claim_documents.document_type` TEXT column for
- * back-compat with the UI and ImageRight metadata override.
+ * back-compat with the UI and Sor metadata override.
  */
 export function pickPrimaryType(entries: ClassificationEntry[]): string {
   if (entries.length === 0) return 'other';

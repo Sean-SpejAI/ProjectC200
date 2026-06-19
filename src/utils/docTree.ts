@@ -1,18 +1,18 @@
 // Builds the Folder → Document (page collection) → Page tree for a claim's
-// documents, mirroring the ImageRight desktop structure so adjusters can find
+// documents, mirroring the Sor desktop structure so adjusters can find
 // the same document there.
 //
 // The tree is reconstructed entirely client-side from the flat claim_documents
-// rows (which carry the denormalized ImageRight folder path + per-page manifest):
+// rows (which carry the denormalized Sor folder path + per-page manifest):
 //
-//   • A "page collection" node = one ImageRight document. For documents we
+//   • A "page collection" node = one Sor document. For documents we
 //     auto-resplit for processing, the original (superseded) HEAD row owns the
 //     identity + full page manifest; opening a given page resolves to the child
 //     slice that actually contains it (via claim_details.page_start/page_end).
-//   • Manual uploads (no ImageRight id, no manifest) render as simple openable
+//   • Manual uploads (no Sor id, no manifest) render as simple openable
 //     page collections with no expandable page list.
 //
-// Page numbers are ABSOLUTE ImageRight page numbers; the link opens the backing
+// Page numbers are ABSOLUTE Sor page numbers; the link opens the backing
 // PDF row at its INTERNAL page (mirrors the offset logic in pageCite.ts).
 
 export interface DocTreeInput {
@@ -24,7 +24,7 @@ export interface DocTreeInput {
   analysis?: unknown;
   source?: string | null;
   processingStatus?: string | null;
-  imagerightDocumentId?: number | null;
+  sorDocumentId?: number | null;
   documentTypeCode?: string | null;
   documentDate?: string | null;
   pageCount?: number | null;
@@ -39,7 +39,7 @@ export interface DocTreeInput {
 }
 
 export interface TreePageNode {
-  /** Absolute ImageRight page number (for display). */
+  /** Absolute Sor page number (for display). */
   n: number;
   format: string | null;
   /** claim_documents row to open for this page. */
@@ -61,7 +61,7 @@ export interface TreeDocNode {
   openRowId: string | null;
   /** Per-page nodes (empty for manual uploads / docs without a manifest). */
   pages: TreePageNode[];
-  isImageRight: boolean;
+  isSor: boolean;
 }
 
 export interface TreeFolderNode {
@@ -76,7 +76,7 @@ export interface TreeFolderNode {
 
 export interface DocTree {
   folders: TreeFolderNode[];
-  /** Documents with no ImageRight folder (manual uploads) — rendered top-level. */
+  /** Documents with no Sor folder (manual uploads) — rendered top-level. */
   looseDocs: TreeDocNode[];
 }
 
@@ -97,15 +97,15 @@ export function stripSplitSuffix(name: string): string {
 
 // Human-facing document name. Strips the "[#id]" uniqueness suffix, ".pdf", and
 // any "· part N of M (pp. …)" split-suffixes, then — when all that's left is our
-// "ir-doc-{id}" placeholder (the ImageRight doc had no custom Description) or
-// nothing — falls back to the ImageRight document TYPE (e.g. "Report"), which is
-// what the ImageRight desktop client itself shows for an unnamed document.
+// "sor-doc-{id}" placeholder (the Sor doc had no custom Description) or
+// nothing — falls back to the Sor document TYPE (e.g. "Report"), which is
+// what the Sor desktop client itself shows for an unnamed document.
 export function displayDocName(
   fileName: string | null | undefined,
   opts?: { documentType?: string | null },
 ): string {
   const stripped = stripSplitSuffix(stripDocLabel(fileName));
-  if (!stripped || stripped === "Document" || /^ir-doc-\d+$/i.test(stripped)) {
+  if (!stripped || stripped === "Document" || /^sor-doc-\d+$/i.test(stripped)) {
     const type = opts?.documentType?.trim();
     if (type) return type;
   }
@@ -194,14 +194,14 @@ export function buildDocTree(docs: DocTreeInput[]): DocTree {
   const docNodes: Array<{ node: TreeDocNode; folderPath: Array<{ id: number | null; name: string }> | null }> = [];
   for (const d of docs) {
     if (childIds.has(d.id)) continue; // folded into its head
-    const isIR = d.imagerightDocumentId != null;
+    const isIR = d.sorDocumentId != null;
     const children = (childrenByHead.get(d.id) ?? [])
       .slice()
       .sort((a, b) => (a.pageStart ?? 0) - (b.pageStart ?? 0));
     const pages = buildPages(d, children);
     docNodes.push({
       node: {
-        key: isIR ? `ir:${d.imagerightDocumentId}` : `doc:${d.id}`,
+        key: isIR ? `ir:${d.sorDocumentId}` : `doc:${d.id}`,
         label: nodeLabel(d),
         typeCode: d.documentTypeCode ?? null,
         documentType: d.documentType,
@@ -211,7 +211,7 @@ export function buildDocTree(docs: DocTreeInput[]): DocTree {
         summary: d.summary,
         openRowId: pickOpenRow(d, children),
         pages,
-        isImageRight: isIR,
+        isSor: isIR,
       },
       folderPath: d.folderPath ?? null,
     });

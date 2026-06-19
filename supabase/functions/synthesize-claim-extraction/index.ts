@@ -9,8 +9,8 @@
 //
 // Triggered by:
 //   - analyze-claim-document, when the final sibling doc completes
-//   - reload-claim-from-imageright, after a successful re-pull
-//   - imageright-sync's pending_content sweep, when a doc's content lands
+//   - reload-claim-from-sor, after a successful re-pull
+//   - sor-sync's pending_content sweep, when a doc's content lands
 //
 // Safe to call repeatedly — it's idempotent and overwrites prior synthesis.
 
@@ -55,7 +55,7 @@ INPUT PER DOCUMENT:
 - extracted analysis JSON (the per-doc Gemini output — has headerInfo, diagnosedInjuries, treatmentRecap, medicalBillBreakdown, etc.)
 
 WEIGHTING RULES (apply IN ORDER — these matter):
-0. **Known claim metadata is AUTHORITATIVE.** The user prompt may begin with a "KNOWN CLAIM METADATA" block listing fields pulled from the source system (ImageRight) or set by a human in the portal. When any of those fields is present and non-empty, USE it as the synthesized value for the matching output field — even if per-doc extractions are silent or contradicting. NEVER overwrite a known metadata value with null. Specifically:
+0. **Known claim metadata is AUTHORITATIVE.** The user prompt may begin with a "KNOWN CLAIM METADATA" block listing fields pulled from the source system (Sor) or set by a human in the portal. When any of those fields is present and non-empty, USE it as the synthesized value for the matching output field — even if per-doc extractions are silent or contradicting. NEVER overwrite a known metadata value with null. Specifically:
    - known claim_number → output.claim_number AND output.headerInfo.claimNumber
    - known claimant_name → output.claimant_name AND a parties[] entry with role "Insured" AND output.headerInfo.namedobGender (see special rule below)
    - known policy_number → output.policy_number
@@ -151,7 +151,7 @@ F) **perInjuryGenerals**: one entry per diagnosedInjuries entry. Each entry's ra
 G) **Internal-only fields**: leave currentReserves and reservesOk as null. These are strategic decisions for the adjuster, not extractable from PDFs.
 
 CITATION RULES — MANDATORY:
-Every "pageRef" / "pageRefs" value MUST cite the DOCUMENT BY ITS file_name followed by the page, formatted EXACTLY: "<file_name> p. <N>" (single page) or "<file_name> pp. <N>-<M>" (range). Use the file_name shown in each document's header (e.g. "ir-doc-116389047.pdf"). NEVER put a doc_id UUID in a pageRef — UUIDs belong ONLY in the _provenance "doc_id"/"source_doc_id" fields. Do NOT wrap the value in parentheses; emit just "ir-doc-116389047.pdf p. 2". If you genuinely cannot tie a fact to a specific page, set the pageRef to null rather than inventing one.
+Every "pageRef" / "pageRefs" value MUST cite the DOCUMENT BY ITS file_name followed by the page, formatted EXACTLY: "<file_name> p. <N>" (single page) or "<file_name> pp. <N>-<M>" (range). Use the file_name shown in each document's header (e.g. "sor-doc-116389047.pdf"). NEVER put a doc_id UUID in a pageRef — UUIDs belong ONLY in the _provenance "doc_id"/"source_doc_id" fields. Do NOT wrap the value in parentheses; emit just "sor-doc-116389047.pdf p. 2". If you genuinely cannot tie a fact to a specific page, set the pageRef to null rather than inventing one.
 
 CLAIM TYPE — infer "claim_type" (one of exactly: "auto", "home", "farm", "life"):
 Decide from incident_description, the policy-number prefix, and document content. Heuristics:
@@ -440,12 +440,12 @@ serve(async (req) => {
       .update({ synthesis_status: "running" })
       .eq("id", claimId);
 
-    // Pull existing claim metadata — fields populated by the ImageRight
+    // Pull existing claim metadata — fields populated by the Sor
     // sync (or by an earlier synthesis) that the LLM should treat as
     // AUTHORITATIVE source-system input. Per-doc OCR/extraction can fail on
     // scanned PDFs (the BUNDY case: Declarations.pdf grounded 0.05), so
     // without this the LLM has no way to surface "BUNDY, JAMES" in the
-    // synthesized output even though we already know it from the ImageRight
+    // synthesized output even though we already know it from the Sor
     // file header. Fetched BEFORE synthesis so it can be passed in the prompt.
     const { data: claimRow, error: claimErr } = await supabase
       .from("claims")
@@ -463,8 +463,8 @@ serve(async (req) => {
       .from("claim_documents")
       .select("id, file_name, file_url, file_size, document_type, document_classifications, processing_status, ai_summary, ai_analysis, claim_details, extraction_completeness, grounding_status, grounding_score")
       .eq("claim_id", claimId)
-      // Exclude docs soft-removed by a reconcile pass (no longer in ImageRight).
-      .is("imageright_removed_at", null)
+      // Exclude docs soft-removed by a reconcile pass (no longer in Sor).
+      .is("sor_removed_at", null)
       .in("processing_status", ["completed", "needs_review"]);
     if (docsErr) throw docsErr;
 
@@ -495,7 +495,7 @@ serve(async (req) => {
     }));
 
     // Surface known claim metadata up-front. Fields here come from the
-    // source system (ImageRight) and were either pulled at sync time or set
+    // source system (Sor) and were either pulled at sync time or set
     // by a human in the portal. The model should treat them as authoritative
     // when per-doc extraction is silent or contradicts them.
     const knownMetadata: Record<string, string | null> = {
@@ -516,7 +516,7 @@ serve(async (req) => {
 
     const userText =
       (knownMetadataText.length > 0
-        ? `=== KNOWN CLAIM METADATA from source system (ImageRight) ===\n` +
+        ? `=== KNOWN CLAIM METADATA from source system (Sor) ===\n` +
           `These are AUTHORITATIVE for the matching output fields. Use them to populate the ` +
           `corresponding values (claim_number, claimant_name, policy_number, incident_date, ` +
           `incident_description, accident_location, headerInfo.claimNumber, headerInfo.dateOfAccident, ` +
@@ -546,7 +546,7 @@ serve(async (req) => {
     //
     // NOTE: file_url is a BARE storage path (private claim-documents bucket), so we
     // DOWNLOAD via the storage client — a plain fetch(file_url) silently fails and
-    // previously disabled this entire re-read for every ImageRight claim.
+    // previously disabled this entire re-read for every Sor claim.
     let demandPart: GeminiPart | null = null;
     let demandReadNote = "";
     try {

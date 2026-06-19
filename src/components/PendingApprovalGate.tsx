@@ -19,7 +19,7 @@ export function PendingApprovalGate() {
     <div className="min-h-screen bg-background flex flex-col">
       <header className="flex justify-between items-center px-6 py-4 border-b border-outline-variant bg-surface">
         <div className="flex items-center gap-3">
-          <img src="/logo.png" alt="Nodak Insurance" className="h-9 w-auto" />
+          <img src="/logo.png" alt="Spej" className="h-9 w-auto" />
           <div>
             <p className="text-label-md text-on-surface-variant uppercase tracking-widest">Account status</p>
             <p className="text-headline-sm text-primary">Pending approval</p>
@@ -43,7 +43,7 @@ export function PendingApprovalGate() {
             <h1 className="text-headline-md text-primary">Waiting for admin approval</h1>
             <p className="text-body-md text-on-surface-variant">
               Your account ({user?.email}) is registered, but an administrator must grant you access before
-              you can use the Nodak Demand Packet Review Portal. You'll be notified once that happens.
+              you can use the Spej Demand Packet Review Portal. You'll be notified once that happens.
             </p>
           </div>
           <div className="bg-surface-container-low border border-outline-variant rounded-xl p-4 text-left">
@@ -51,7 +51,7 @@ export function PendingApprovalGate() {
               Next steps
             </p>
             <ul className="text-body-md text-on-surface-variant space-y-1 list-disc list-inside">
-              <li>Contact IT support or your Nodak Insurance admin to request access.</li>
+              <li>Contact IT support or your Spej admin to request access.</li>
               <li>Once your access is approved, sign back in to enter the portal.</li>
             </ul>
           </div>

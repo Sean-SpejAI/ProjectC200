@@ -286,7 +286,7 @@ if (pdfPath && existsSync(pdfPath)) {
 
 // ---------- 5. Send via Resend ----------
 const payload = {
-  from: "Nodak Nuclei Scanner <noreply@info.spej.dev>",
+  from: "Spej Nuclei Scanner <noreply@info.spej.dev>",
   to: process.env.NUCLEI_REPORT_TO.split(",").map((s) => s.trim()).filter(Boolean),
   subject,
   html: bodyHtml,

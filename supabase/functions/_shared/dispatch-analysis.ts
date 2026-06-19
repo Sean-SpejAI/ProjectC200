@@ -2,7 +2,7 @@ import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // Flag-gated dispatch for document analysis.
 //
-// When `imageright_settings.staged_analysis_enabled = 'true'`, documents are
+// When `sor_settings.staged_analysis_enabled = 'true'`, documents are
 // routed into the STAGED pgmq pipeline (one heavy pass per Edge invocation, with
 // auto-resplit + dead-letter protection) via the idempotent enqueue RPC.
 // Otherwise we fall back to the MONOLITHIC path (the original behavior) — a
@@ -20,7 +20,7 @@ export async function isStagedEnabled(supabase: SupabaseClient): Promise<boolean
   if (_stagedCache && now - _stagedCache.at < STAGED_TTL_MS) return _stagedCache.value;
   try {
     const { data } = await supabase
-      .from("imageright_settings")
+      .from("sor_settings")
       .select("value")
       .eq("name", "staged_analysis_enabled")
       .maybeSingle();

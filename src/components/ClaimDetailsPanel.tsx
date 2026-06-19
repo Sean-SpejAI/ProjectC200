@@ -27,7 +27,7 @@ interface ClaimContext {
     originalFileName?: string | null;
     source?: string | null;
     processingStatus?: string | null;
-    imagerightDocumentId?: number | null;
+    sorDocumentId?: number | null;
     documentTypeCode?: string | null;
     documentDate?: string | null;
     pageCount?: number | null;

@@ -11,7 +11,7 @@ export function getDocumentTypeLabel(type: string | null | undefined): string {
     photo: "Photo",
     other: "Other",
     user_upload: "Document",
-    "imageright-import": "ImageRight Document",
+    "sor-import": "System of Record Document",
   };
   return labels[type] || type;
 }

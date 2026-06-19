@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 
 interface ClaimContext {
   id?: string;
-  source?: "manual" | "imageright";
+  source?: "manual" | "sor";
   claimNumber: string;
   claimType: string;
   incidentDate: string;
@@ -35,8 +35,8 @@ interface ClaimContext {
     originalFileName?: string | null;
     source?: string | null;
     processingStatus?: string | null;
-    // ImageRight hierarchy (null for manual uploads) — powers the document tree + citations.
-    imagerightDocumentId?: number | null;
+    // Sor hierarchy (null for manual uploads) — powers the document tree + citations.
+    sorDocumentId?: number | null;
     documentTypeCode?: string | null;
     documentDate?: string | null;
     pageCount?: number | null;
@@ -76,9 +76,9 @@ const Index = () => {
           `id, source, claim_number, claim_type, incident_date, incident_description, claimant_name,
            ai_synthesis, synthesis_status, pending_reconcile, synthesis_human_edited_at,
            claim_documents (id, file_name, document_type, file_url, ai_summary, ai_analysis, claim_details, processing_status,
-             source, imageright_document_id, imageright_document_type_code, imageright_document_date,
-             imageright_page_count, imageright_folder_id, imageright_folder_name, imageright_folder_path, imageright_pages,
-             imageright_removed_at)`,
+             source, sor_document_id, sor_document_type_code, sor_document_date,
+             sor_page_count, sor_folder_id, sor_folder_name, sor_folder_path, sor_pages,
+             sor_removed_at)`,
         )
         .eq("id", claimId)
         .single();
@@ -91,15 +91,15 @@ const Index = () => {
 
       const documents = (claim.claim_documents || [])
         // Keep superseded rows that are part of the resplit hierarchy so the tree
-        // can fold them: ImageRight heads (own the page-collection identity + full
+        // can fold them: Sor heads (own the page-collection identity + full
         // manifest) AND intermediate fetch/resplit parents (resplit_of set) — the
         // latter lets a 2-level split (head → part → 15-page chunks) collapse into
         // the single source document instead of leaking the chunks as loose rows.
-        // Soft-removed docs (no longer present in ImageRight) drop out entirely.
+        // Soft-removed docs (no longer present in Sor) drop out entirely.
         .filter((doc: any) =>
-          doc.imageright_removed_at == null && (
+          doc.sor_removed_at == null && (
             doc.processing_status !== "superseded" ||
-            doc.imageright_document_id != null ||
+            doc.sor_document_id != null ||
             doc.claim_details?.resplit_of != null
           )
         )
@@ -116,18 +116,18 @@ const Index = () => {
         originalFileName: doc.claim_details?.original_file_name ?? null,
         source: doc.source ?? null,
         processingStatus: doc.processing_status ?? null,
-        imagerightDocumentId: doc.imageright_document_id ?? null,
-        documentTypeCode: doc.imageright_document_type_code ?? null,
-        documentDate: doc.imageright_document_date ?? null,
-        pageCount: doc.imageright_page_count ?? null,
-        folderName: doc.imageright_folder_name ?? null,
-        folderPath: doc.imageright_folder_path ?? null,
-        pages: doc.imageright_pages ?? null,
+        sorDocumentId: doc.sor_document_id ?? null,
+        documentTypeCode: doc.sor_document_type_code ?? null,
+        documentDate: doc.sor_document_date ?? null,
+        pageCount: doc.sor_page_count ?? null,
+        folderName: doc.sor_folder_name ?? null,
+        folderPath: doc.sor_folder_path ?? null,
+        pages: doc.sor_pages ?? null,
       }));
 
       setClaimContext({
         id: claim.id,
-        source: (claim as { source?: "manual" | "imageright" }).source,
+        source: (claim as { source?: "manual" | "sor" }).source,
         claimNumber: claim.claim_number,
         claimType: claim.claim_type || "",
         incidentDate: claim.incident_date || "",

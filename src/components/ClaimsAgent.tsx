@@ -208,7 +208,7 @@ export function ClaimsAgent({ claimContext, onClaimContextChange, onNewAnalysis,
     {
       id: "initial-greeting",
       role: "agent",
-      content: "Hello! I'm your Nodak Insurance claims document analyst. I can help you review medical records, receipts, and other documents for bodily injury claims.\n\nTo get started, please provide the claim details or upload documents for analysis. I'll review each document, summarize the key information, and verify it corresponds to the accident claim.",
+      content: "Hello! I'm your Spej claims document analyst. I can help you review medical records, receipts, and other documents for bodily injury claims.\n\nTo get started, please provide the claim details or upload documents for analysis. I'll review each document, summarize the key information, and verify it corresponds to the accident claim.",
       timestamp: new Date(),
     },
   ]);
@@ -229,7 +229,7 @@ export function ClaimsAgent({ claimContext, onClaimContextChange, onNewAnalysis,
   // snapshot (which would clobber concurrent edits from sibling panels).
   const claimContextRef = useRef(claimContext);
   claimContextRef.current = claimContext;
-  // Reconcile approval (held ImageRight change on a human-edited claim).
+  // Reconcile approval (held System of Record change on a human-edited claim).
   const [reconcileDetailsOpen, setReconcileDetailsOpen] = useState(false);
   const [isApprovingReconcile, setIsApprovingReconcile] = useState(false);
   // Post-approve poll: timer handle + the claim id it's anchored to. The id ref
@@ -282,7 +282,7 @@ export function ClaimsAgent({ claimContext, onClaimContextChange, onNewAnalysis,
     if (next && claimContext?.id) await loadAuditEntries(claimContext.id);
   };
 
-  // Approve / dismiss a held ImageRight reconcile.
+  // Approve / dismiss a held System of Record reconcile.
   const handleReconcileDecision = async (approved: boolean) => {
     if (!claimContext?.id) return;
     setIsApprovingReconcile(true);
@@ -294,8 +294,8 @@ export function ClaimsAgent({ claimContext, onClaimContextChange, onNewAnalysis,
       toast({
         title: approved ? "Applying changes…" : "Dismissed",
         description: approved
-          ? "Re-running the analysis with the latest ImageRight data."
-          : "The pending ImageRight change was dismissed.",
+          ? "Re-running the analysis with the latest System of Record data."
+          : "The pending System of Record change was dismissed.",
       });
       setReconcileDetailsOpen(false);
       onClaimContextChange?.({ ...claimContextRef.current, pendingReconcile: null }); // hide the notice (use latest snapshot)
@@ -791,7 +791,7 @@ export function ClaimsAgent({ claimContext, onClaimContextChange, onNewAnalysis,
               <div className="flex items-center gap-2 text-sm text-amber-900">
                 <Icon name="warning" size={18} className="text-amber-600 shrink-0" />
                 <span>
-                  ImageRight Data has changed, okay to{" "}
+                  System of Record Data has changed, okay to{" "}
                   <strong>{claimContext.pendingReconcile.mode === "full" ? "reprocess" : "update"}</strong>{" "}
                   the analysis?
                 </span>
@@ -834,10 +834,10 @@ export function ClaimsAgent({ claimContext, onClaimContextChange, onNewAnalysis,
         <Dialog open={reconcileDetailsOpen} onOpenChange={setReconcileDetailsOpen}>
           <DialogContent className="max-w-lg">
             <DialogHeader>
-              <DialogTitle>ImageRight change details</DialogTitle>
+              <DialogTitle>System of Record change details</DialogTitle>
               <DialogDescription>
                 {claimContext.pendingReconcile.mode === "full"
-                  ? "This is a large change. Approving will REPROCESS the claim: wipe the current documents + analysis, re-pull everything from ImageRight, and re-run the full analysis. Your manual edits will be replaced (they remain in the audit trail)."
+                  ? "This is a large change. Approving will REPROCESS the claim: wipe the current documents + analysis, re-pull everything from System of Record, and re-run the full analysis. Your manual edits will be replaced (they remain in the audit trail)."
                   : "Approving will UPDATE the claim: fetch + analyze the new/changed documents, drop any removed ones, and re-synthesize the summary. Your manual edits to the analysis may be replaced by the refreshed summary (they remain in the audit trail)."}
               </DialogDescription>
             </DialogHeader>
@@ -866,7 +866,7 @@ export function ClaimsAgent({ claimContext, onClaimContextChange, onNewAnalysis,
               )}
               {claimContext.pendingReconcile.diff.removedCount > 0 && (
                 <div className="font-semibold text-destructive">
-                  {claimContext.pendingReconcile.diff.removedCount} document(s) removed from ImageRight
+                  {claimContext.pendingReconcile.diff.removedCount} document(s) removed from System of Record
                 </div>
               )}
               {claimContext.pendingReconcile.diff.folderChanged && (
@@ -927,7 +927,7 @@ export function ClaimsAgent({ claimContext, onClaimContextChange, onNewAnalysis,
               per-N-PDFs pattern.
               States:
               - every doc has no fileUrl → source-empty banner (no PDF in
-                ImageRight, can't analyze)
+                System of Record, can't analyze)
               - synthesis present + ready → render card from ai_synthesis
               - synthesis_status='running' → "Consolidating..." placeholder
               - synthesis_status='failed' or null → small note, no card */}
@@ -937,10 +937,10 @@ export function ClaimsAgent({ claimContext, onClaimContextChange, onNewAnalysis,
             <div className="px-4 py-3 rounded-2xl border border-warning/30 bg-warning/5 text-on-surface text-body-sm space-y-1">
               <div className="font-bold text-warning">No PDF content available in source system</div>
               <p>
-                ImageRight returned an empty record for this claim's{" "}
+                System of Record returned an empty record for this claim's{" "}
                 {claimContext.documents.length === 1 ? "document" : "documents"}.
-                Try re-pulling from ImageRight using the admin{" "}
-                <span className="font-medium">Reload from ImageRight</span> button — if the
+                Try re-pulling from System of Record using the admin{" "}
+                <span className="font-medium">Reload from System of Record</span> button — if the
                 content was added after the original sync, this will recover it. Otherwise the
                 source record is a placeholder with no pages.
               </p>

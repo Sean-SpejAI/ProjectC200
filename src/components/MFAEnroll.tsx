@@ -59,7 +59,7 @@ export function MFAEnroll({ onComplete, onCancel, continueLabel, onContinue }: M
       const { data, error } = await supabase.auth.mfa.enroll({
         factorType: "totp",
         friendlyName: "Authenticator App",
-        issuer: "Nodak Demand Packet App",
+        issuer: "Spej Demand Packet App",
       });
       if (error) throw error;
       setQrCode(data.totp.qr_code);

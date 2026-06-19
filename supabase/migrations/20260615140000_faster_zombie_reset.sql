@@ -11,7 +11,7 @@
 -- ones. The give-up cap (mark 'failed' after the 3rd reset) is unchanged, so a
 -- chunk that truly can't complete now fails in ~24 min instead of ~90, freeing
 -- its concurrency slot and unblocking synthesis sooner.
-CREATE OR REPLACE FUNCTION public.imageright_reset_zombie_processing()
+CREATE OR REPLACE FUNCTION public.sor_reset_zombie_processing()
  RETURNS void
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -39,7 +39,7 @@ BEGIN
           THEN 'watchdog_gave_up: still not completing after repeated resets — marked failed so synthesis can proceed'
         ELSE 'watchdog_reset: was processing for >8min without completion'
       END
-  WHERE source IN ('imageright', 'manual')
+  WHERE source IN ('sor', 'manual')
     AND processing_status = 'processing'
     AND processing_started_at IS NOT NULL
     AND processing_started_at < now() - interval '8 minutes';

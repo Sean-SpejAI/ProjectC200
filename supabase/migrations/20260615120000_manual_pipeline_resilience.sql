@@ -7,7 +7,7 @@
 --   1. DEADLOCK. A handful of the largest chunks reached 'processing', completed
 --      early passes, then the 400 s Edge worker wall-clock killed the invocation
 --      mid-pipeline BEFORE any terminal status was written — leaving them
---      'processing' with no error. imageright_reset_zombie_processing reset them
+--      'processing' with no error. sor_reset_zombie_processing reset them
 --      to 'pending' after 30 min; they were redispatched; same wall-clock kill;
 --      repeat — 12+ times. Worse, those zombies occupied the entire manual
 --      concurrency cap (3), so the remaining pending chunk could never start, and
@@ -25,11 +25,11 @@
 --      browser pre-splits every upload to <=25 MB chunks, so the OOM rationale is
 --      gone and 3 is needlessly slow for an 80+ chunk claim. Raise to 6.
 --
--- The ImageRight redispatch branch (small, server-streamed docs) is unchanged.
+-- The Sor redispatch branch (small, server-streamed docs) is unchanged.
 
 -- 1) Zombie reset, now with a give-up cap so a doc that keeps dying can't loop
 --    forever (and can't permanently hold a concurrency slot / block synthesis).
-CREATE OR REPLACE FUNCTION public.imageright_reset_zombie_processing()
+CREATE OR REPLACE FUNCTION public.sor_reset_zombie_processing()
  RETURNS void
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -59,7 +59,7 @@ BEGIN
           THEN 'watchdog_gave_up: still not completing after repeated resets — marked failed so synthesis can proceed'
         ELSE 'watchdog_reset: was processing for >30min without completion'
       END
-  WHERE source IN ('imageright', 'manual')
+  WHERE source IN ('sor', 'manual')
     AND processing_status = 'processing'
     AND processing_started_at IS NOT NULL
     AND processing_started_at < now() - interval '30 minutes';
@@ -68,15 +68,15 @@ $function$;
 
 -- 2) Redispatch pending docs. Manual concurrency cap raised 3 -> 6 (workers only
 --    ever see <=25 MB pre-split chunks now, so the old OOM-stampede risk is gone).
-CREATE OR REPLACE FUNCTION public.imageright_redispatch_stuck_pending()
+CREATE OR REPLACE FUNCTION public.sor_redispatch_stuck_pending()
  RETURNS void
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
 DECLARE
-  v_url        text := public.imageright_setting('analyze_document_url');
-  v_key        text := public.imageright_setting('service_role_key');
+  v_url        text := public.sor_setting('analyze_document_url');
+  v_key        text := public.sor_setting('service_role_key');
   v_manual_cap int  := 6;     -- max manual analyze jobs in flight at once (was 3)
   v_inflight   int;
   v_slots      int;
@@ -86,12 +86,12 @@ BEGIN
     RETURN;
   END IF;
 
-  -- ImageRight docs are small and streamed server-side — keep the original
+  -- Sor docs are small and streamed server-side — keep the original
   -- behaviour (up to 5 stale-pending docs per run, oldest first).
   FOR r IN
     SELECT id
     FROM claim_documents
-    WHERE source = 'imageright'
+    WHERE source = 'sor'
       AND processing_status = 'pending'
       AND uploaded_at < now() - interval '10 minutes'
     ORDER BY uploaded_at ASC
@@ -140,14 +140,14 @@ $function$;
 DO $cron$
 BEGIN
   PERFORM cron.schedule(
-    'imageright-watchdog-zombie-processing',
+    'sor-watchdog-zombie-processing',
     '*/2 * * * *',
-    'SELECT public.imageright_reset_zombie_processing()'
+    'SELECT public.sor_reset_zombie_processing()'
   );
   PERFORM cron.schedule(
-    'imageright-watchdog-stuck-pending',
+    'sor-watchdog-stuck-pending',
     '*/2 * * * *',
-    'SELECT public.imageright_redispatch_stuck_pending()'
+    'SELECT public.sor_redispatch_stuck_pending()'
   );
 EXCEPTION WHEN OTHERS THEN
   RAISE NOTICE 'cron reschedule skipped: %', SQLERRM;

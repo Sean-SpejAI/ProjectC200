@@ -1,6 +1,6 @@
 // Pure reconcile decision logic — NO Deno/Supabase/network dependencies — so it
 // is unit-testable from the frontend vitest suite as well as runnable in the
-// Deno edge runtime (imported by imageright-pull-claim.ts).
+// Deno edge runtime (imported by sor-pull-claim.ts).
 
 export type ReconcileMode = "noop" | "incremental" | "full";
 
@@ -15,7 +15,7 @@ export interface ReconcileThresholds {
   // ...or when documents moved / appeared under a new folder path (reorg).
   fullOnFolderReorg: boolean;
   // Whether an incremental soft-remove also deletes the storage object. Default
-  // false — a transient ImageRight blip stays recoverable; a dated GC sweep can
+  // false — a transient Sor blip stays recoverable; a dated GC sweep can
   // reclaim space later.
   purgeStorageOnRemove: boolean;
 }
@@ -30,7 +30,7 @@ export const DEFAULT_RECONCILE_THRESHOLDS: ReconcileThresholds = {
 
 export interface TreeDiff {
   isKnown: boolean;        // claim already has stored docs
-  storedCount: number;     // active stored HEAD docs (with imageright_document_id)
+  storedCount: number;     // active stored HEAD docs (with sor_document_id)
   freshCount: number;      // fresh tree docs (after the pageCount===0 skip)
   added: number[];         // docIds present in the fresh tree, absent in DB
   modified: number[];      // docIds in both whose last_modified/page_count changed

@@ -4,7 +4,7 @@ name: Nuclei Scan (dev/stage/prod)
 # workflow_dispatch against a chosen environment. Sends potentially-active
 # probes (template-driven), so the same scanner-guard short-circuit that
 # protects ZAP runs also protects this one: the `x-scanner-run` header tells
-# instrumented Edge Functions to skip ImageRight pulls, Resend mail, and
+# instrumented Edge Functions to skip Sor pulls, Resend mail, and
 # Vertex AI calls.
 #
 # Auth model:
@@ -52,17 +52,11 @@ permissions:
 
 jobs:
   scan:
-    # Self-hosted runner on the nodak-prod Azure VM (static public IP
-    # 20.9.44.53). Moved off ubuntu-latest because Vercel's adaptive
-    # edge throttle was repeatedly aborting audit-mode scans at
-    # ~26-43% completion when bursts came from GitHub-hosted runner
-    # IPs (which rotate). A static source IP lets the request pattern
-    # stay below Vercel's per-source threshold; if it still trips,
-    # the IP can be allowlisted in Vercel's firewall (requires Pro).
-    # Runner has Docker (for the projectdiscovery/nuclei container),
-    # Node 22 (via actions/setup-node), and google-chrome-stable
-    # (for the PDF build step) pre-installed.
-    runs-on: [self-hosted, nodak-prod]
+    # GitHub-hosted runner. If the target's edge throttle aborts audit-mode
+    # scans from rotating GitHub IPs, switch to a self-hosted runner with a
+    # static source IP (needs Docker for the projectdiscovery/nuclei
+    # container, Node 22, and google-chrome-stable for the PDF build step).
+    runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     outputs:
       alerts:    ${{ steps.tally.outputs.alerts }}

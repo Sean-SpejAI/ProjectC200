@@ -8,7 +8,7 @@ import { getDocumentTypeLabel, getVerificationBadge } from "@/utils/docDisplay";
 import { buildDocTree, type DocTreeInput, type TreeDocNode, type TreeFolderNode } from "@/utils/docTree";
 
 // Folders and page collections are COLLAPSED by default; users expand to drill
-// in. The tree mirrors ImageRight's File → Folder → Document → Page structure.
+// in. The tree mirrors Sor's File → Folder → Document → Page structure.
 const PAGE_PREVIEW_LIMIT = 60;
 
 const fmtDate = (iso: string | null): string | null => {
@@ -137,7 +137,7 @@ function DocNode({ doc, depth }: { doc: TreeDocNode; depth: number }) {
 
 function FolderNode({ folder, depth }: { folder: TreeFolderNode; depth: number }) {
   // Top-level folders open by default so the adjuster immediately sees the
-  // ImageRight folder structure; nested folders, documents, and page lists
+  // Sor folder structure; nested folders, documents, and page lists
   // stay collapsed.
   const [open, setOpen] = useState(depth === 0);
   const indent = { paddingLeft: `${depth * 14 + 4}px` };

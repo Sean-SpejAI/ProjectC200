@@ -1,11 +1,11 @@
 // Service-role-callable bulk claim pull by claim_number.
 //
-// reload-claim-from-imageright already does this for a SINGLE claim — but it
+// reload-claim-from-sor already does this for a SINGLE claim — but it
 // requires an admin user JWT. This function does the same work using
 // service-role bearer auth so an operator can pull a batch of claim numbers
 // from a script / curl without going through the UI.
 //
-// Mirrors the proxy + SOAP path used by reload-claim-from-imageright:
+// Mirrors the proxy + SOAP path used by reload-claim-from-sor:
 //   1. resolveFileIdByClaimNumber(n) — SOAP FindFilesEx via the proxy
 //   2. pullClaim(fileId, {runId, isReload:false}) — upserts claim row +
 //      enumerates docs + dispatches analyze for each
@@ -16,7 +16,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { pullClaim, resolveFileIdByClaimNumber, type FolderFilter } from "../_shared/imageright-pull-claim.ts";
+import { pullClaim, resolveFileIdByClaimNumber, type FolderFilter } from "../_shared/sor-pull-claim.ts";
 import { scannerShortCircuit } from "../_shared/scanner-guard.ts";
 
 const corsHeaders = {
@@ -57,8 +57,8 @@ const handler = async (req: Request): Promise<Response> => {
 
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
   const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const IMAGERIGHT_PROXY_URL = Deno.env.get("IMAGERIGHT_PROXY_URL");
-  const IMAGERIGHT_PROXY_TOKEN = Deno.env.get("IMAGERIGHT_PROXY_TOKEN");
+  const SOR_PROXY_URL = Deno.env.get("SOR_PROXY_URL");
+  const SOR_PROXY_TOKEN = Deno.env.get("SOR_PROXY_TOKEN");
 
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     return new Response(JSON.stringify({ error: "supabase_not_configured" }), {
@@ -66,8 +66,8 @@ const handler = async (req: Request): Promise<Response> => {
       headers: { "Content-Type": "application/json", ...corsHeaders },
     });
   }
-  if (!IMAGERIGHT_PROXY_URL || !IMAGERIGHT_PROXY_TOKEN) {
-    return new Response(JSON.stringify({ error: "imageright_proxy_not_configured" }), {
+  if (!SOR_PROXY_URL || !SOR_PROXY_TOKEN) {
+    return new Response(JSON.stringify({ error: "sor_proxy_not_configured" }), {
       status: 500,
       headers: { "Content-Type": "application/json", ...corsHeaders },
     });
@@ -116,7 +116,7 @@ const handler = async (req: Request): Promise<Response> => {
 
   // Create a manual sync_run so this batch is auditable.
   const { data: run, error: runErr } = await admin
-    .from("imageright_sync_runs")
+    .from("sor_sync_runs")
     .insert({
       run_type: "manual_reload",
       status: "running",
@@ -149,7 +149,7 @@ const handler = async (req: Request): Promise<Response> => {
     try {
       const resolved = await resolveFileIdByClaimNumber(claimNumber);
       if (resolved == null) {
-        results.push({ claim_number: claimNumber, outcome: "not_found_in_imageright" });
+        results.push({ claim_number: claimNumber, outcome: "not_found_in_sor" });
         continue;
       }
 
@@ -185,11 +185,11 @@ const handler = async (req: Request): Promise<Response> => {
   const succeeded = results.filter((r) =>
     r.outcome === "succeeded" || r.outcome === "content_pending"
   ).length;
-  const notFound = results.filter((r) => r.outcome === "not_found_in_imageright").length;
+  const notFound = results.filter((r) => r.outcome === "not_found_in_sor").length;
   const failed = results.length - succeeded - notFound;
 
   await admin
-    .from("imageright_sync_runs")
+    .from("sor_sync_runs")
     .update({
       status: failed > 0 ? "partial" : "completed",
       completed_at: new Date().toISOString(),
@@ -205,7 +205,7 @@ const handler = async (req: Request): Promise<Response> => {
       run_id: run.id,
       requested: targets.length,
       succeeded,
-      not_found_in_imageright: notFound,
+      not_found_in_sor: notFound,
       failed,
       results,
     }),

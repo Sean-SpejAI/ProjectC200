@@ -46,7 +46,7 @@ interface Claim {
   claim_type: string;
   incident_date: string | null;
   status: string;
-  source?: "manual" | "imageright" | null;
+  source?: "manual" | "sor" | null;
   created_at: string;
   updated_at: string;
   reviewed_at: string | null;
@@ -758,14 +758,14 @@ export function ClaimsQueue({ type, onSelectClaim }: ClaimsQueueProps) {
                         >
                           {claim.status.replace("_", " ")}
                         </Badge>
-                        {claim.source === "imageright" && (
+                        {claim.source === "sor" && (
                           <Badge
                             variant="outline"
                             className="text-[10px] rounded-full border-primary/30 bg-primary/10 text-primary gap-1"
-                            title="Synced from ImageRight"
+                            title="Synced from System of Record"
                           >
                             <Icon name="cloud_done" size={10} />
-                            IR
+                            SOR
                           </Badge>
                         )}
                       </div>

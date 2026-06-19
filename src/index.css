@@ -6,61 +6,61 @@
 
 @layer base {
   :root {
-    /* Nodak Elite InsurTech — Material 3 surface scale */
+    /* Spej brand — teal #4ecdc4 / navy #1a2332 / off-white #f8f9fa — Material 3 surface scale */
     /* Base surfaces */
-    --background: 222 100% 99%;          /* #f8f9ff */
-    --foreground: 215 60% 12%;           /* #0b1c30 */
+    --background: 210 17% 98%;           /* #f8f9fa off-white */
+    --foreground: 215 32% 15%;           /* #1a2332 navy */
     --card: 0 0% 100%;                   /* #ffffff */
-    --card-foreground: 215 60% 12%;
+    --card-foreground: 215 32% 15%;
     --popover: 0 0% 100%;
-    --popover-foreground: 215 60% 12%;
+    --popover-foreground: 215 32% 15%;
 
     /* Brand */
-    --primary: 222 100% 7%;              /* #000b21 deep navy */
+    --primary: 215 32% 15%;              /* #1a2332 Spej navy */
     --primary-foreground: 0 0% 100%;
-    --secondary: 351 100% 37%;           /* #bb0021 corporate red */
-    --secondary-foreground: 0 0% 100%;
+    --secondary: 174 55% 55%;            /* #4ecdc4 Spej teal */
+    --secondary-foreground: 215 32% 15%;
 
-    --muted: 220 100% 96%;               /* #eff4ff surface-container-low */
-    --muted-foreground: 222 7% 29%;      /* #44474e on-surface-variant */
+    --muted: 200 24% 96%;                /* cool light gray */
+    --muted-foreground: 215 16% 40%;     /* #5a6473 */
 
-    --accent: 220 100% 96%;
-    --accent-foreground: 215 60% 12%;
+    --accent: 178 40% 94%;               /* light teal tint */
+    --accent-foreground: 215 32% 15%;
 
     --destructive: 0 75% 41%;            /* #ba1a1a */
     --destructive-foreground: 0 0% 100%;
 
-    --border: 222 11% 79%;               /* #c4c6ce outline-variant */
-    --input: 222 11% 79%;
-    --ring: 222 100% 7%;
+    --border: 210 20% 88%;
+    --input: 210 20% 88%;
+    --ring: 174 55% 55%;                 /* teal focus ring */
 
     --radius: 0.75rem;
 
-    /* MD3 surface tonal scale */
-    --surface: 222 100% 99%;             /* #f8f9ff */
-    --surface-dim: 218 76% 88%;          /* #cbdbf5 */
-    --surface-bright: 222 100% 99%;
+    /* MD3 surface tonal scale (teal-tinted neutral) */
+    --surface: 210 17% 98%;              /* #f8f9fa */
+    --surface-dim: 200 18% 90%;
+    --surface-bright: 0 0% 100%;
     --surface-container-lowest: 0 0% 100%;       /* #ffffff */
-    --surface-container-low: 220 100% 96%;       /* #eff4ff */
-    --surface-container: 220 100% 95%;           /* #e5eeff */
-    --surface-container-high: 217 100% 93%;      /* #dce9ff */
-    --surface-container-highest: 215 99% 91%;    /* #d3e4fe */
-    --on-surface: 215 60% 12%;
-    --on-surface-variant: 222 7% 29%;
-    --inverse-surface: 213 35% 20%;              /* #213145 */
-    --inverse-on-surface: 218 100% 96%;          /* #eaf1ff */
+    --surface-container-low: 200 25% 97%;
+    --surface-container: 200 22% 95%;
+    --surface-container-high: 195 22% 93%;
+    --surface-container-highest: 190 22% 91%;
+    --on-surface: 215 32% 15%;
+    --on-surface-variant: 215 16% 40%;
+    --inverse-surface: 215 28% 20%;
+    --inverse-on-surface: 200 30% 96%;
 
     /* Outline */
-    --outline: 224 4% 47%;               /* #75777e */
-    --outline-variant: 222 11% 79%;      /* #c4c6ce */
+    --outline: 215 12% 50%;
+    --outline-variant: 210 20% 88%;
 
     /* Tonal containers */
-    --primary-container: 218 66% 15%;            /* #0d2240 */
-    --on-primary-container: 218 28% 58%;         /* #778aad */
-    --primary-fixed: 219 100% 92%;               /* #d6e3ff */
-    --primary-fixed-dim: 219 60% 81%;            /* #b4c7ed */
-    --secondary-container: 354 75% 51%;          /* #e02636 */
-    --on-secondary-container: 320 100% 99%;      /* #fffbff */
+    --primary-container: 215 30% 20%;            /* deep navy */
+    --on-primary-container: 174 40% 80%;         /* light teal on navy */
+    --primary-fixed: 178 45% 88%;                /* light teal */
+    --primary-fixed-dim: 176 40% 75%;
+    --secondary-container: 174 45% 88%;          /* teal tint */
+    --on-secondary-container: 175 79% 18%;       /* deep teal */
 
     /* Status colors (high-chroma icons, low-chroma tinted bg) */
     --success: 142 71% 35%;
@@ -71,20 +71,20 @@
     --info-foreground: 0 0% 100%;
 
     /* Agent chat */
-    --agent-bubble: 220 100% 96%;
-    --agent-bubble-foreground: 215 60% 12%;
-    --user-bubble: 222 100% 7%;
+    --agent-bubble: 185 35% 95%;         /* teal tint */
+    --agent-bubble-foreground: 215 32% 15%;
+    --user-bubble: 215 32% 15%;          /* navy */
     --user-bubble-foreground: 0 0% 100%;
 
     /* Sidebar tokens */
     --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 215 60% 12%;
-    --sidebar-primary: 222 100% 7%;
+    --sidebar-foreground: 215 32% 15%;
+    --sidebar-primary: 215 32% 15%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 217 100% 93%;
-    --sidebar-accent-foreground: 215 60% 12%;
-    --sidebar-border: 222 11% 79%;
-    --sidebar-ring: 222 100% 7%;
+    --sidebar-accent: 178 45% 92%;       /* teal tint (active nav) */
+    --sidebar-accent-foreground: 175 79% 22%;
+    --sidebar-border: 210 20% 88%;
+    --sidebar-ring: 174 55% 55%;
   }
 }
 

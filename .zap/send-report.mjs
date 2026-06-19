@@ -5,7 +5,7 @@
 // Env vars:
 //   RESEND_API_KEY        Resend API key (sender uses info.spej.dev domain)
 //   ZAP_REPORT_TO         recipient(s) — comma-separated for multiple
-//                         (e.g. "sb@spej.ai,blalonde@nodakins.com")
+//                         (e.g. "sb@spej.ai")
 //   SCAN_KIND             baseline | full | api  (label only)
 //   SCAN_ENV              dev | stage | prod  (label only)
 //   SCAN_TARGET           URL or OpenAPI path that was scanned (label only)
@@ -190,7 +190,7 @@ const finalBody = bodyHtml + inlineReport + "</body></html>";
 
 // ---------- 4. Send via Resend ----------
 const payload = {
-  from: "Nodak ZAP Scanner <noreply@info.spej.dev>",
+  from: "Spej ZAP Scanner <noreply@info.spej.dev>",
   // Split comma-separated recipient list so the same secret can target
   // one or many addresses without a workflow change.
   to: process.env.ZAP_REPORT_TO.split(",").map((s) => s.trim()).filter(Boolean),

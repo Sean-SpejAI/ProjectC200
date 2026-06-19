@@ -1,5 +1,5 @@
 ---
-name: Nodak Elite InsurTech
+name: Spej Elite InsurTech
 colors:
   surface: '#f8f9ff'
   surface-dim: '#cbdbf5'

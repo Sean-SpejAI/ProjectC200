@@ -63,7 +63,7 @@ async function main() {
 
   // Step 3: generate current OTP from the stored shared secret.
   const totpDriver = new OTPAuth.TOTP({
-    issuer: "Nodak",
+    issuer: "Spej",
     label: process.env.ZAP_USER_EMAIL,
     algorithm: "SHA1",
     digits: 6,

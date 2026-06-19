@@ -33,9 +33,9 @@ create or replace function public.analyze_stages_pump()
  set search_path to 'public'
 as $fn$
 declare
-  v_enabled text := public.imageright_setting('staged_analysis_enabled');
-  v_url     text := public.imageright_setting('analyze_document_url');
-  v_key     text := public.imageright_setting('service_role_key');
+  v_enabled text := public.sor_setting('staged_analysis_enabled');
+  v_url     text := public.sor_setting('analyze_document_url');
+  v_key     text := public.sor_setting('service_role_key');
   v_vt      int  := 600;  -- visibility timeout (s) > 400 s worker wall-clock
   v_batch   int  := 6;    -- max stage-dispatches per tick (in-flight cap)
   v_maxread int  := 4;    -- reads before dead-letter (a stage that keeps dying)

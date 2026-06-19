@@ -11,7 +11,7 @@ const docs: CiteDoc[] = [
 ];
 
 describe("resolvePageCite layered citations", () => {
-  it("renders folder › document › page for an IR doc", () => {
+  it("renders folder › document › page for an SOR doc", () => {
     const r = resolvePageCite("Declarations [#84624118] p. 2", docs);
     expect(r.text).toBe("Claim Information › Declarations › p. 2");
     expect(r.documentId).toBe("d-sg11");
@@ -55,25 +55,25 @@ describe("resolvePageCite layered citations", () => {
   it("renders a comma-separated multi-page list and links to the first page", () => {
     const multi: CiteDoc[] = [
       { id: "d", folderName: "Insured", documentType: "Report", pageStart: 1,
-        fileName: "ir-doc-89559592 [#89559592] · part 1 of 3 (pp. 1-120).pdf" },
+        fileName: "sor-doc-89559592 [#89559592] · part 1 of 3 (pp. 1-120).pdf" },
     ];
     const r = resolvePageCite(
-      "ir-doc-89559592 [#89559592] · part 1 of 3 pp. 1-120.pdf pp. 1, 76, 78",
+      "sor-doc-89559592 [#89559592] · part 1 of 3 pp. 1-120.pdf pp. 1, 76, 78",
       multi,
     );
     expect(r.documentId).toBe("d");
     expect(r.page).toBe(1);                          // link to the FIRST cited page
     expect(r.text).toBe("Insured › Report › pp. 1, 76, 78");
     expect(r.text).not.toMatch(/part \d+ of \d+/);   // no split cruft
-    expect(r.text).not.toContain("ir-doc-");         // placeholder → type label
+    expect(r.text).not.toContain("sor-doc-");         // placeholder → type label
   });
 
-  it("falls back to the document type when the file name is the ir-doc placeholder", () => {
+  it("falls back to the document type when the file name is the sor-doc placeholder", () => {
     const placeholder: CiteDoc[] = [
       { id: "x", folderName: "Claim Information", documentType: "Report", pageStart: null,
-        fileName: "ir-doc-89863879 [#89863879].pdf" },
+        fileName: "sor-doc-89863879 [#89863879].pdf" },
     ];
-    const r = resolvePageCite("ir-doc-89863879 [#89863879].pdf p. 4", placeholder);
+    const r = resolvePageCite("sor-doc-89863879 [#89863879].pdf p. 4", placeholder);
     expect(r.documentId).toBe("x");
     expect(r.text).toBe("Claim Information › Report › p. 4");
     expect(r.page).toBe(4);

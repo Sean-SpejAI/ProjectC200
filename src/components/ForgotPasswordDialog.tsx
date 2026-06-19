@@ -49,8 +49,8 @@ export function ForgotPasswordDialog({ onBack }: ForgotPasswordDialogProps) {
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <img src="/logo.png" alt="Nodak Insurance" className="h-16 w-auto mx-auto mb-4" />
-          <h1 className="text-headline-md text-primary">Nodak Demand Packet Review Portal</h1>
+          <img src="/logo.png" alt="Spej" className="h-16 w-auto mx-auto mb-4" />
+          <h1 className="text-headline-md text-primary">Spej Demand Packet Review Portal</h1>
           <p className="text-body-md text-on-surface-variant mt-1">Reset your password</p>
         </div>
         <Card className="p-6 bg-surface-container-lowest border-outline-variant shadow-elevation-1 rounded-2xl">
@@ -76,7 +76,7 @@ export function ForgotPasswordDialog({ onBack }: ForgotPasswordDialogProps) {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="john.smith@nodakins.com"
+                  placeholder="john.smith@spej.ai"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className={error ? "border-destructive" : ""}

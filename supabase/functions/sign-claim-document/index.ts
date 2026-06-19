@@ -4,7 +4,7 @@
 // The browser calls this function with a `documentId` (NOT a raw storage path,
 // so a caller can't request arbitrary objects); we verify the user's session,
 // look up that document's storage path with the service role, and return a
-// signed URL valid for 1 hour. Any authenticated Nodak staff user may open any
+// signed URL valid for 1 hour. Any authenticated Spej staff user may open any
 // claim's document (matches the app's model where all staff see all claims).
 //
 // verify_jwt stays at the platform default (true): this is a user-facing
