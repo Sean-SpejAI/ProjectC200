@@ -10,6 +10,7 @@ import { Icon } from "@/components/Icon";
 import { z } from "zod";
 import { cn } from "@/lib/utils";
 import { ForgotPasswordDialog } from "@/components/ForgotPasswordDialog";
+import { AccessGate, isGateUnlocked } from "@/components/AccessGate";
 
 const authSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -22,6 +23,9 @@ export default function Auth() {
   const { toast } = useToast();
   const [isLogin, setIsLogin] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  // Pre-login access gate (obfuscation only — see AccessGate.tsx). Until it is
+  // cleared, the login form below stays disabled and blurred behind the gate.
+  const [gateUnlocked, setGateUnlocked] = useState(isGateUnlocked);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({ email: "", password: "", fullName: "" });
@@ -68,6 +72,7 @@ export default function Auth() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!gateUnlocked) return; // access gate must be cleared first
     if (!validateForm()) return;
     setIsLoading(true);
     try {
@@ -164,6 +169,7 @@ export default function Auth() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      {!gateUnlocked && <AccessGate onUnlock={() => setGateUnlocked(true)} />}
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <img src="/logo.png" alt="Spej" className="h-16 w-auto mx-auto mb-4" />
@@ -183,6 +189,7 @@ export default function Auth() {
                   placeholder="John Smith"
                   value={formData.fullName}
                   onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                  disabled={!gateUnlocked}
                   className={errors.fullName ? "border-destructive" : ""}
                 />
                 {errors.fullName && <p className="text-xs text-destructive">{errors.fullName}</p>}
@@ -198,6 +205,7 @@ export default function Auth() {
                 placeholder="john.smith@spej.ai"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                disabled={!gateUnlocked}
                 className={errors.email ? "border-destructive" : ""}
               />
               {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
@@ -213,20 +221,22 @@ export default function Auth() {
                   placeholder="••••••••"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  disabled={!gateUnlocked}
                   className={cn("pr-10", errors.password && "border-destructive")}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
+                  disabled={!gateUnlocked}
                   aria-label={showPassword ? "Hide password" : "Show password"}
-                  className="absolute inset-y-0 right-0 px-3 flex items-center text-on-surface-variant hover:text-primary transition-colors"
+                  className="absolute inset-y-0 right-0 px-3 flex items-center text-on-surface-variant hover:text-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <Icon name={showPassword ? "visibility_off" : "visibility"} size={18} />
                 </button>
               </div>
               {errors.password && <p className="text-xs text-destructive">{errors.password}</p>}
             </div>
-            <Button type="submit" className="w-full" disabled={isLoading}>
+            <Button type="submit" className="w-full" disabled={isLoading || !gateUnlocked}>
               {isLoading ? (
                 <>
                   <Icon name="progress_activity" size={16} className="mr-2 animate-spin" />
@@ -245,7 +255,8 @@ export default function Auth() {
                 <button
                   type="button"
                   onClick={() => setShowForgotPassword(true)}
-                  className="text-sm text-on-surface-variant hover:text-primary transition-colors"
+                  disabled={!gateUnlocked}
+                  className="text-sm text-on-surface-variant hover:text-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-on-surface-variant"
                 >
                   Forgot password?
                 </button>
@@ -257,7 +268,8 @@ export default function Auth() {
                 setIsLogin(!isLogin);
                 setErrors({});
               }}
-              className="block w-full text-sm text-on-surface-variant hover:text-primary transition-colors"
+              disabled={!gateUnlocked}
+              className="block w-full text-sm text-on-surface-variant hover:text-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-on-surface-variant"
             >
               {isLogin ? "Need an account? Register" : "Already have an account? Sign in"}
             </button>
