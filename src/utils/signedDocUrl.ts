@@ -4,6 +4,24 @@ import { supabase } from "@/integrations/supabase/client";
 // directly. PDFs are opened via a short-lived signed URL minted by the
 // sign-claim-document edge function (which verifies the user's session).
 
+// Route the signed storage URL through our own domain so the address bar reads
+// c200.spej.dev/d/... instead of <project>.supabase.co. A Vercel rewrite
+// (/d/:path* -> the Supabase storage sign endpoint) proxies it; the token query
+// and #page=N anchor are preserved, so access control + paging are unchanged.
+// Skipped on localhost (vite dev has no proxy) — there we open the raw URL.
+function rewriteToAppDomain(url: string): string {
+  try {
+    const host = window.location.hostname;
+    if (host === "localhost" || host === "127.0.0.1") return url;
+    return url.replace(
+      /^https?:\/\/[^/]+\/storage\/v1\/object\/sign\/claim-documents\//,
+      `${window.location.origin}/d/`,
+    );
+  } catch {
+    return url;
+  }
+}
+
 /** Mint a signed URL for a claim document's PDF (optionally with a #page=N anchor). */
 export async function getSignedDocUrl(
   documentId: string,
@@ -13,7 +31,7 @@ export async function getSignedDocUrl(
     body: { documentId, page: page ?? undefined },
   });
   if (error || !data?.url) return null;
-  return data.url as string;
+  return rewriteToAppDomain(data.url as string);
 }
 
 /**

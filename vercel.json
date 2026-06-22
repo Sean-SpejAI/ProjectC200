@@ -2,6 +2,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
+    { "source": "/d/:path*", "destination": "https://fihahgtxitixjkoegunk.supabase.co/storage/v1/object/sign/claim-documents/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
