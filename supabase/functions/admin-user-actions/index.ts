@@ -185,9 +185,17 @@ serve(async (req) => {
       // lets them set their own password, after which auth.users.email_confirmed_at
       // is populated. We don't generate or store a temporary password here —
       // never seeing the user's password is the point of the invite flow.
+      // Redirect the invite link at the deployed app's set-password page. We
+      // pass redirectTo explicitly so the link never falls back to the project
+      // Auth "Site URL" (which used to be http://localhost:3000 and sent invited
+      // users to a dead localhost page). Prefer the caller's origin; fall back to
+      // the production host.
+      const callerOrigin = (body?.origin as string | undefined)?.trim().replace(/\/+$/, "");
+      const inviteRedirectTo = `${callerOrigin || "https://c200.spej.dev"}/reset-password`;
       const { data: inviteData, error: inviteErr } = await admin.auth.admin
         .inviteUserByEmail(newEmail!, {
           data: { full_name: newFullName ?? null },
+          redirectTo: inviteRedirectTo,
         });
       if (inviteErr) {
         // Common case: email already registered
