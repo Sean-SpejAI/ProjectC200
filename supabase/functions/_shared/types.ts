@@ -106,14 +106,15 @@ export const ERROR_CODES = {
 
 // File size constants
 export const MAX_FILE_SIZE = 300 * 1024 * 1024; // 300MB
-// Any PDF over this threshold routes through GCS → Vertex fileData (gs://) instead
-// of inline base64. Set deliberately low so a 250 MB PDF can never inline-embed
-// (which would balloon to ~333 MB base64 + JSON envelope — well over worker heap).
+// Any PDF over this threshold routes through the Gemini Files API (fileData URI)
+// instead of inline base64. Set deliberately low so a 250 MB PDF can never
+// inline-embed (which would balloon to ~333 MB base64 + JSON envelope — well over
+// worker heap) and to stay under the standard API's ~20 MB inline-request ceiling.
 export const GEMINI_FILE_API_THRESHOLD = 5 * 1024 * 1024; // 5MB
 export const PRO_MODEL_THRESHOLD = 50 * 1024 * 1024; // 50MB
 export const STREAMING_THRESHOLD = 40 * 1024 * 1024; // 40MB
-// Hard cap on what Vertex AI Gemini will accept via gs:// fileData (docs say 2 GB).
-// We pick 300 MB to match MAX_FILE_SIZE and leave headroom above the 250 MB client docs.
+// Hard cap on what the Gemini Files API will accept (docs allow ~2 GB). We pick
+// 300 MB to match MAX_FILE_SIZE and leave headroom above the 250 MB client docs.
 export const GEMINI_PDF_INFERENCE_LIMIT = 300 * 1024 * 1024; // 300MB
 
 export const corsHeaders = {

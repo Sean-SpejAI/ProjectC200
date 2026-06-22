@@ -300,10 +300,10 @@ sequenceDiagram
 
 | Mode | Condition | Method |
 |------|-----------|--------|
-| `gemini-file-api` | PDF > 20MB + Vertex AI configured | Upload to Gemini File API, then generateContent |
-| `pdf-inline` | PDF ≤ 20MB | Base64 encode, send inline |
-| `vision-url` | Image files | Send image URL directly |
-| `text-fallback` | No Vertex AI + large file | Text-only extraction |
+| `gemini-file` | PDF > `GEMINI_FILE_API_THRESHOLD` + Gemini key configured | Upload to Gemini Files API, reference by `fileData` URI |
+| `pdf-inline` | PDF ≤ threshold | Base64 encode, send inline |
+| `vision-url` | Image files | Fetch + send image bytes inline |
+| `text-fallback` | No Gemini key + large file | Text-only extraction |
 
 **File Size Thresholds:**
 
@@ -428,8 +428,9 @@ graph LR
 
 | Service | Purpose | Auth Method |
 |---------|---------|-------------|
-| Google Vertex AI (Gemini 2.5) | Document analysis, extraction, claims chat | Service account JWT → Bearer token |
-| Gemini File API | Large PDF upload/processing | Service account Bearer token |
+| Google Gemini API (Gemini 2.5) | Document analysis, extraction, claims chat | API key (`GEMINI_API_KEY`, `x-goog-api-key`) |
+| Gemini Files API | Large PDF upload/processing | API key (`GEMINI_API_KEY`) |
+| Anthropic (Claude) | Pass 5 grounding / repair evaluation | API key (`ANTHROPIC_API_KEY`, `x-api-key`) |
 | Resend | Password reset emails | API key (`RESEND_API_KEY`) |
 
 ---
@@ -467,6 +468,6 @@ claim-documents/
 |----------|---------|
 | `SUPABASE_URL` | Auto-provided by Supabase |
 | `SUPABASE_SERVICE_ROLE_KEY` | Auto-provided by Supabase |
-| `GOOGLE_SERVICE_ACCOUNT_JSON` | Vertex AI authentication |
-| `GCP_REGION` | Vertex AI region (default: us-central1) |
+| `GEMINI_API_KEY` | Google Gemini API key (analysis, extraction, claims chat) |
+| `ANTHROPIC_API_KEY` | Anthropic API key (Pass 5 grounding) |
 | `RESEND_API_KEY` | Resend email service |

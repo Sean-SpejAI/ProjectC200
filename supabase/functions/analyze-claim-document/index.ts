@@ -12,9 +12,9 @@ import {
 import { log, logStep, logTiming, getErrorCode, arrayBufferToBase64, parseAIResponse, parseToISODate } from '../_shared/utils.ts';
 import { buildPrompts } from '../_shared/prompts.ts';
 import {
-  uploadPdfToGcs, deleteGcsObject,
-  generateWithVertexFile, generateWithInlineContent,
-  classifyDocumentFromGcs, classifyDocumentInline, pickPrimaryType,
+  uploadPdfToGeminiFiles, deleteGeminiFile,
+  generateWithGeminiFile, generateWithInlineContent,
+  classifyDocumentFromFile, classifyDocumentInline, pickPrimaryType,
   GeminiPart, ClassificationEntry
 } from '../_shared/gemini.ts';
 import { updateJobProgress, addJobLog, createProcessingJob } from '../_shared/job.ts';
@@ -316,7 +316,7 @@ async function chainNextManualSibling(
 // the default behaviour and its risk profile are unchanged.
 //
 // Stages (each ≤ one heavy full-PDF pass; fits the 400 s worker wall-clock):
-//   extract : Pass 0 classify + Pass 1 broad extraction (share one PDF/GCS prep)
+//   extract : Pass 0 classify + Pass 1 broad extraction (share one PDF prep)
 //   enrich  : Pass 2 gap-fill + Pass 3 validate + Pass 4 self-heal (text-only)
 //   ground  : Pass 5 Anthropic grounding + finalize (persist + synthesis + chain)
 // Each stage reads the prior result from ai_analysis_raw, persists its output,
@@ -398,7 +398,7 @@ async function runAnalysisStage(documentId: string, stage: string, msgId?: numbe
         await resplitDocument(supabase, doc, storagePath, msgId);
         return;
       }
-      // Pass 0 + Pass 1 (share the PDF/GCS prep inside performAnalysis).
+      // Pass 0 + Pass 1 (share the PDF prep inside performAnalysis).
       const result = await performAnalysisWithProgress(
         doc.file_name ?? 'document', doc.file_size ?? 0, doc.mime_type ?? 'application/pdf',
         storagePath, fileUrl, undefined, undefined, doc.document_type ?? 'other', claimDetails, null,
@@ -1257,16 +1257,16 @@ async function performAnalysis(
   log('INFO', 'ANALYSIS', '🚀 STARTING DOCUMENT ANALYSIS');
   log('INFO', 'ANALYSIS', 'Input parameters', { fileName, fileSizeMB: `${(fileSize / 1024 / 1024).toFixed(2)} MB`, mimeType });
   
-  const HAS_VERTEX_AI = !!Deno.env.get('GOOGLE_SERVICE_ACCOUNT_JSON');
-  if (!HAS_VERTEX_AI) throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON is not configured');
+  const HAS_GEMINI = !!Deno.env.get('GEMINI_API_KEY');
+  if (!HAS_GEMINI) throw new Error('GEMINI_API_KEY is not configured');
 
   const isPdfType = mimeType === 'application/pdf' || fileName?.toLowerCase().endsWith('.pdf');
   const isImageType = mimeType?.startsWith('image/') || fileName?.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp|bmp)$/);
-  
+
   let processingMode = 'text';
   let pdfBase64: string | null = null;
-  let gcsObjectName: string | null = null;
-  let gcsUri: string | null = null;
+  let geminiFileName: string | null = null;
+  let geminiFileUri: string | null = null;
   let fileBuffer: ArrayBuffer | null = null;
 
   // Step 1: Download file if needed
@@ -1285,9 +1285,9 @@ async function performAnalysis(
   logStep(2, TOTAL_STEPS, 'ANALYSIS', 'Determining processing mode');
 
   if (isPdfType) {
-    if (fileSize > GEMINI_FILE_API_THRESHOLD && HAS_VERTEX_AI) {
-      log('INFO', 'ANALYSIS', '📤 Using Vertex AI via GCS for large PDF');
-      processingMode = 'vertex-gcs';
+    if (fileSize > GEMINI_FILE_API_THRESHOLD && HAS_GEMINI) {
+      log('INFO', 'ANALYSIS', '📤 Using Gemini Files API for large PDF');
+      processingMode = 'gemini-file';
 
       if (!fileBuffer && fileUrl) {
         // Bucket is private — download via service role (never fetch a public URL).
@@ -1302,10 +1302,11 @@ async function performAnalysis(
         throw new Error('Oversize PDF requires storagePath, fileUrl, or fileBase64 — none provided.');
       }
 
-      logStep(3, TOTAL_STEPS, 'ANALYSIS', 'Uploading PDF to GCS');
-      gcsObjectName = `sor/${crypto.randomUUID()}-${fileName.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-      gcsUri = await uploadPdfToGcs(fileBuffer, gcsObjectName);
-    } else if (HAS_VERTEX_AI || fileSize <= GEMINI_FILE_API_THRESHOLD) {
+      logStep(3, TOTAL_STEPS, 'ANALYSIS', 'Uploading PDF to Gemini Files API');
+      const uploaded = await uploadPdfToGeminiFiles(fileBuffer, fileName.replace(/[^a-zA-Z0-9._-]/g, '_'));
+      geminiFileName = uploaded.name;
+      geminiFileUri = uploaded.uri;
+    } else if (HAS_GEMINI || fileSize <= GEMINI_FILE_API_THRESHOLD) {
       log('INFO', 'ANALYSIS', '📄 Using inline PDF');
       processingMode = 'pdf-inline';
       
@@ -1350,8 +1351,8 @@ async function performAnalysis(
   if (isPdfType) {
     try {
       logStep(4, TOTAL_STEPS, 'ANALYSIS', 'Pass 0: classifying document');
-      if (processingMode === 'vertex-gcs' && gcsUri) {
-        classifications = await classifyDocumentFromGcs(gcsUri, fileSize);
+      if (processingMode === 'gemini-file' && geminiFileUri) {
+        classifications = await classifyDocumentFromFile(geminiFileUri, fileSize);
       } else if (processingMode === 'pdf-inline' && pdfBase64) {
         classifications = await classifyDocumentInline(pdfBase64);
       }
@@ -1390,26 +1391,25 @@ async function performAnalysis(
 
   let aiContent: string = '';
 
-  if (processingMode === 'vertex-gcs' && gcsUri && gcsObjectName) {
+  if (processingMode === 'gemini-file' && geminiFileUri && geminiFileName) {
     try {
-      aiContent = await generateWithVertexFile(gcsUri, systemPrompt, userPrompt, fileSize, {
+      aiContent = await generateWithGeminiFile(geminiFileUri, systemPrompt, userPrompt, fileSize, {
         responseSchema,
         maxOutputTokens: EXTRACTION_MAX_TOKENS,
         ...(forcePro ? { model: 'gemini-2.5-pro' as const } : {}),
       });
     } finally {
-      await deleteGcsObject(gcsObjectName);
+      await deleteGeminiFile(geminiFileName);
     }
   } else {
-    // Inline content via Vertex AI: PDF base64 / image base64 / text-only.
-    // Migrated off the Lovable AI Gateway 2026-05-16; service-account auth
-    // is shared with the File-API path above (see _shared/vertex-auth.ts).
+    // Inline content via the Gemini API: PDF base64 / image base64 / text-only.
+    // Single API key (GEMINI_API_KEY) — same auth as the Files-API path above.
     const parts: GeminiPart[] = [{ text: userPrompt }];
 
     if (processingMode === 'pdf-inline' && pdfBase64) {
       parts.push({ inlineData: { mimeType: 'application/pdf', data: pdfBase64 } });
     } else if (processingMode === 'vision-url' && fileUrl) {
-      // Vertex AI doesn't accept arbitrary image URLs — fetch and inline.
+      // The Gemini API doesn't accept arbitrary image URLs — fetch and inline.
       const imgResponse = await fetch(fileUrl);
       if (!imgResponse.ok) throw new Error(`Failed to fetch image: ${imgResponse.status}`);
       const imgBuffer = await imgResponse.arrayBuffer();
@@ -1449,7 +1449,7 @@ async function performAnalysis(
   analysisResult.fileSizeMB = (fileSize / 1024 / 1024).toFixed(2);
   analysisResult.modelUsed = forcePro
     ? 'gemini-2.5-pro'
-    : (processingMode === 'vertex-gcs'
+    : (processingMode === 'gemini-file'
         ? (fileSize > PRO_MODEL_THRESHOLD ? 'gemini-2.5-pro' : 'gemini-2.5-flash')
         : (fileSize > 5 * 1024 * 1024 ? 'gemini-2.5-pro' : 'gemini-2.5-flash'));
 
@@ -1479,12 +1479,12 @@ async function performAnalysisWithProgress(
 ) {
   if (jobCtx) await updateJobProgress(jobCtx, 15, 'Preparing document for analysis...');
 
-  const HAS_VERTEX_AI = !!Deno.env.get('GOOGLE_SERVICE_ACCOUNT_JSON');
+  const HAS_GEMINI = !!Deno.env.get('GEMINI_API_KEY');
   const isPdfType = mimeType === 'application/pdf' || fileName?.toLowerCase().endsWith('.pdf');
-  const useVertexGcs = fileSize > GEMINI_FILE_API_THRESHOLD && HAS_VERTEX_AI && isPdfType;
+  const useGeminiFile = fileSize > GEMINI_FILE_API_THRESHOLD && HAS_GEMINI && isPdfType;
 
-  if (jobCtx && useVertexGcs) {
-    await addJobLog(jobCtx, 'info', `Large file detected (${(fileSize / 1024 / 1024).toFixed(1)} MB), using Vertex AI via GCS`);
+  if (jobCtx && useGeminiFile) {
+    await addJobLog(jobCtx, 'info', `Large file detected (${(fileSize / 1024 / 1024).toFixed(1)} MB), using Gemini Files API`);
   }
 
   if (jobCtx) await updateJobProgress(jobCtx, 30, 'AI analyzing document content...');
@@ -1512,7 +1512,7 @@ serve(async (req) => {
 
   // Scanner short-circuit. analyze-claim-document is internal-only (called
   // by pull-claim with service-role bearer; verify_jwt=false). Guard fires
-  // immediately to prevent storage downloads + Vertex AI calls during scans.
+  // immediately to prevent storage downloads + Gemini API calls during scans.
   const scannerEarly = scannerShortCircuit(req, corsHeaders);
   if (scannerEarly) return scannerEarly;
 
@@ -1796,7 +1796,7 @@ serve(async (req) => {
             // ====================================================================
             // PASS 5: Anthropic Grounding & Repair Loop
             //
-            // Claude (Azure AI Foundry) reads the source PDF + the Gemini output,
+            // Claude (via the Anthropic API) reads the source PDF + the Gemini output,
             // grades each section, and emits targeted repair instructions. Repairs
             // feed back into performGapFillExtraction with correctiveGuidance.
             // Gated behind ENABLE_ANTHROPIC_GROUNDING — when off, the pipeline is

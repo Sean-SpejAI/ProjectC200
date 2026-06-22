@@ -1,7 +1,7 @@
 // Pass 5: Anthropic-driven grounding & repair loop.
 //
-// After Gemini's Pass 1-4 finish, Claude (via Azure AI Foundry) reads the
-// source PDF and the extracted JSON, grades each schema section, and emits
+// After Gemini's Pass 1-4 finish, Claude (via the Anthropic Messages API) reads
+// the source PDF and the extracted JSON, grades each schema section, and emits
 // targeted repair instructions for any section it flags weak or fail.
 // Repair instructions flow back through performGapFillExtraction with the
 // new correctiveGuidance parameter; we then re-call Claude to verify the fix.
@@ -16,7 +16,7 @@ import {
   GroundingVerdict,
   GroundingSourceBlock,
   SectionVerdict,
-} from './azure-anthropic.ts';
+} from './anthropic.ts';
 import {
   buildGroundingRubric,
   DocumentClassification,

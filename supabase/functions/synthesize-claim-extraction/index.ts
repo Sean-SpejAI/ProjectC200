@@ -415,7 +415,7 @@ serve(async (req) => {
 
   // Scanner short-circuit. synthesize-claim-extraction is internal-only
   // (called by analyze-claim-document; verify_jwt=false). Guard prevents
-  // Vertex AI calls + claim mutations during scans.
+  // Gemini API calls + claim mutations during scans.
   const scannerEarly = scannerShortCircuit(req, corsHeaders);
   if (scannerEarly) return scannerEarly;
 

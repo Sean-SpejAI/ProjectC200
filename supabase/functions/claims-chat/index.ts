@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { getAccessToken, getProjectId, getRegion } from "../_shared/vertex-auth.ts";
 import { scannerShortCircuit } from "../_shared/scanner-guard.ts";
 
 const corsHeaders = {
@@ -71,14 +70,22 @@ serve(async (req) => {
   // Scanner short-circuit. claims-chat has no in-code auth — platform-level
   // verify_jwt=true enforces it before the request reaches us, so by the
   // time we're executing, the caller is authenticated. Guard prevents
-  // Vertex AI calls during scans.
+  // Gemini API calls during scans.
   const scannerEarly = scannerShortCircuit(req, corsHeaders);
   if (scannerEarly) return scannerEarly;
 
   try {
     const { message, claimContext, conversationHistory = [] }: ChatRequest = await req.json();
 
-    console.log("Processing chat message for claims assistant (Vertex AI / Gemini)");
+    console.log("Processing chat message for claims assistant (Gemini API)");
+
+    const apiKey = Deno.env.get("GEMINI_API_KEY");
+    if (!apiKey) {
+      return new Response(
+        JSON.stringify({ error: "GEMINI_API_KEY is not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
 
     const systemPrompt = buildSystemPrompt(claimContext);
     const contents = [
@@ -89,15 +96,12 @@ serve(async (req) => {
       { role: "user", parts: [{ text: message }] },
     ];
 
-    const accessToken = await getAccessToken();
-    const projectId = getProjectId();
-    const region = getRegion();
-    const url = `https://${region}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${region}/publishers/google/models/${MODEL}:streamGenerateContent?alt=sse`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:streamGenerateContent?alt=sse`;
 
     const vertexResponse = await fetch(url, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        "x-goog-api-key": apiKey,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -113,7 +117,7 @@ serve(async (req) => {
 
     if (!vertexResponse.ok || !vertexResponse.body) {
       const errorText = await vertexResponse.text();
-      console.error("Vertex AI error:", vertexResponse.status, errorText);
+      console.error("Gemini API error:", vertexResponse.status, errorText);
       if (vertexResponse.status === 429) {
         return new Response(
           JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment.", code: "RATE_LIMITED" }),
@@ -121,7 +125,7 @@ serve(async (req) => {
         );
       }
       return new Response(
-        JSON.stringify({ error: `Vertex AI error: ${vertexResponse.status}` }),
+        JSON.stringify({ error: `Gemini API error: ${vertexResponse.status}` }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }

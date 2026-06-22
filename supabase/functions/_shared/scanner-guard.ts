@@ -4,7 +4,7 @@
 // the value matches the `SCANNER_TOKEN` Edge Function env var, side-effecting
 // functions return a synthetic 200 and skip the real work — so scans can
 // exercise auth + input-validation surface without triggering Sor
-// pulls, Resend emails, or Vertex AI calls.
+// pulls, Resend emails, or Gemini API calls.
 //
 // The guard is INERT in environments where `SCANNER_TOKEN` isn't set, so
 // accidentally setting the header on a production project that lacks the

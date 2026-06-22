@@ -1,76 +1,136 @@
-// Gemini-on-Vertex-AI operations.
+// Gemini operations on the standard Google AI (generativelanguage) API.
 //
-// Two PDF input paths are used by analyze-claim-document:
-//   1. inlineData (base64-encoded bytes in the request body) — for PDFs ≤ 5 MB.
-//   2. fileData.fileUri with a gs:// URI — for PDFs > 5 MB. The PDF is uploaded
-//      to a GCS bucket (`GCP_GCS_BUCKET`, default `spej-claims-vertex-uploads`)
-//      that the Vertex AI service account has Object Admin on, then deleted
-//      after analysis. Arbitrary HTTPS URLs in fileData.fileUri are capped at
-//      15 MB by Vertex; gs:// allows up to 2 GB. We don't use the Google AI
-//      Files API on generativelanguage.googleapis.com — that endpoint rejects
-//      SA OAuth tokens with `ACCESS_TOKEN_SCOPE_INSUFFICIENT`.
+// Auth is a single API key (GEMINI_API_KEY) sent as `x-goog-api-key` — no GCP
+// service account / OAuth, no project or region. Two PDF input paths are used
+// by analyze-claim-document:
+//   1. inlineData (base64 bytes in the request body) — for PDFs ≤ the inline
+//      request ceiling (the standard API caps a single request near ~20 MB; we
+//      route anything over GEMINI_FILE_API_THRESHOLD to the Files API instead).
+//   2. fileData.fileUri via the Files API — for larger PDFs. The PDF is
+//      uploaded (files.upload), referenced by its returned URI for one
+//      generateContent call, then deleted (files.delete). This replaces the
+//      old GCS + Vertex `gs://` path; unlike SA-OAuth tokens, an API key CAN
+//      use the Files API.
 
 import { GEMINI_PDF_INFERENCE_LIMIT, PRO_MODEL_THRESHOLD } from './types.ts';
 import { log, logTiming } from './utils.ts';
-import { getAccessToken, getProjectId, getRegion } from './vertex-auth.ts';
 
-const DEFAULT_GCS_BUCKET = 'spej-claims-vertex-uploads';
+const API_BASE = 'https://generativelanguage.googleapis.com';
 
-function getGcsBucket(): string {
-  return Deno.env.get('GCP_GCS_BUCKET') || DEFAULT_GCS_BUCKET;
+function getApiKey(): string {
+  const key = Deno.env.get('GEMINI_API_KEY');
+  if (!key) throw new Error('GEMINI_API_KEY is not configured');
+  return key;
 }
 
-export async function uploadPdfToGcs(
+// generativelanguage addresses models as `models/<id>`.
+function modelPath(model: string): string {
+  return model.startsWith('models/') ? model : `models/${model}`;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+// =====================================================================
+// Files API — upload large PDFs and reference them by URI.
+// =====================================================================
+
+/**
+ * Upload a PDF to the Gemini Files API and return its `{ uri, name }`. The uri
+ * goes into a fileData part; the name (e.g. "files/abc123") is used to delete
+ * it afterward. Uses the resumable upload protocol (reliable for binary), then
+ * polls until the file is ACTIVE.
+ */
+export async function uploadPdfToGeminiFiles(
   buffer: ArrayBuffer | Uint8Array,
-  objectName: string,
-): Promise<string> {
+  displayName: string,
+): Promise<{ uri: string; name: string }> {
   const startTime = Date.now();
-  const bucket = getGcsBucket();
-  const token = await getAccessToken();
+  const key = getApiKey();
   const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+  const numBytes = bytes.byteLength;
+  const sizeMB = (numBytes / 1024 / 1024).toFixed(2);
+  log('INFO', 'GEMINI_FILES', `Uploading PDF to Files API (${sizeMB} MB)`, { displayName });
 
-  const sizeMB = (bytes.byteLength / 1024 / 1024).toFixed(2);
-  log('INFO', 'GCS_UPLOAD', `Uploading to gs://${bucket}/${objectName}`, { sizeMB });
-
-  const url = `https://storage.googleapis.com/upload/storage/v1/b/${bucket}/o?uploadType=media&name=${encodeURIComponent(objectName)}`;
-  const response = await fetch(url, {
+  // 1. Start a resumable upload session.
+  const startResp = await fetch(`${API_BASE}/upload/v1beta/files`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/pdf',
+      'x-goog-api-key': key,
+      'X-Goog-Upload-Protocol': 'resumable',
+      'X-Goog-Upload-Command': 'start',
+      'X-Goog-Upload-Header-Content-Length': String(numBytes),
+      'X-Goog-Upload-Header-Content-Type': 'application/pdf',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ file: { display_name: displayName } }),
+  });
+  if (!startResp.ok) {
+    const t = await startResp.text();
+    throw new Error(`Files API start failed: ${startResp.status} - ${t.substring(0, 300)}`);
+  }
+  const uploadUrl =
+    startResp.headers.get('X-Goog-Upload-URL') || startResp.headers.get('x-goog-upload-url');
+  if (!uploadUrl) throw new Error('Files API start returned no upload URL');
+
+  // 2. Upload the bytes and finalize in one shot.
+  const upResp = await fetch(uploadUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Length': String(numBytes),
+      'X-Goog-Upload-Offset': '0',
+      'X-Goog-Upload-Command': 'upload, finalize',
     },
     body: bytes,
   });
+  if (!upResp.ok) {
+    const t = await upResp.text();
+    throw new Error(`Files API upload failed: ${upResp.status} - ${t.substring(0, 300)}`);
+  }
+  const info = await upResp.json();
+  let file = info.file;
+  if (!file?.name || !file?.uri) throw new Error('Files API upload returned no file uri/name');
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`GCS upload failed: ${response.status} - ${errorText.substring(0, 300)}`);
+  // 3. Poll until ACTIVE (PDFs are usually immediate; bound the wait).
+  let state: string = file.state;
+  const deadline = Date.now() + 60_000;
+  while (state === 'PROCESSING' && Date.now() < deadline) {
+    await sleep(1500);
+    const g = await fetch(`${API_BASE}/v1beta/${file.name}`, { headers: { 'x-goog-api-key': key } });
+    if (!g.ok) break;
+    file = await g.json();
+    state = file.state;
+  }
+  if (state !== 'ACTIVE') {
+    throw new Error(`Files API: file did not become ACTIVE (state=${state})`);
   }
 
-  const gsUri = `gs://${bucket}/${objectName}`;
-  logTiming('GCS_UPLOAD', 'Upload', startTime);
-  log('INFO', 'GCS_UPLOAD', `✅ Uploaded to ${gsUri}`);
-  return gsUri;
+  logTiming('GEMINI_FILES', 'Upload', startTime);
+  log('INFO', 'GEMINI_FILES', `✅ Uploaded ${file.name}`, { uri: file.uri });
+  return { uri: file.uri, name: file.name };
 }
 
-export async function deleteGcsObject(objectName: string): Promise<void> {
-  const bucket = getGcsBucket();
+export async function deleteGeminiFile(name: string): Promise<void> {
   try {
-    const token = await getAccessToken();
-    const url = `https://storage.googleapis.com/storage/v1/b/${bucket}/o/${encodeURIComponent(objectName)}`;
-    const response = await fetch(url, {
+    const key = getApiKey();
+    const r = await fetch(`${API_BASE}/v1beta/${name}`, {
       method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { 'x-goog-api-key': key },
     });
-    if (response.ok || response.status === 404) {
-      log('INFO', 'GCS_DELETE', `✅ Deleted gs://${bucket}/${objectName}`);
+    if (r.ok || r.status === 404) {
+      log('INFO', 'GEMINI_FILES', `✅ Deleted ${name}`);
     } else {
-      log('WARN', 'GCS_DELETE', `Delete returned ${response.status} for ${objectName}`);
+      log('WARN', 'GEMINI_FILES', `Delete returned ${r.status} for ${name}`);
     }
   } catch (error) {
-    log('WARN', 'GCS_DELETE', `Failed to delete ${objectName} (object will persist)`, error);
+    log('WARN', 'GEMINI_FILES', `Failed to delete ${name} (file will expire on its own)`, error);
   }
 }
+
+// =====================================================================
+// generateContent core
+// =====================================================================
 
 export interface GenerateOptions {
   /** Override the default model (e.g. force flash for cheap classification). */
@@ -83,85 +143,76 @@ export interface GenerateOptions {
   maxOutputTokens?: number;
 }
 
-export async function generateWithVertexFile(
-  gcsUri: string,
-  systemPrompt: string,
-  userPrompt: string,
-  fileSize: number,
-  opts: GenerateOptions = {},
-): Promise<string> {
-  const startTime = Date.now();
-  const token = await getAccessToken();
+// Gemini contents-API "parts" shape. Inline data is base64-encoded bytes
+// (PDF or image); fileData uses a Files API URI; text is plain text.
+export type GeminiPart =
+  | { text: string }
+  | { inlineData: { mimeType: string; data: string } }
+  | { fileData: { mimeType: string; fileUri: string } };
 
-  if (fileSize > GEMINI_PDF_INFERENCE_LIMIT) {
-    const limitMB = (GEMINI_PDF_INFERENCE_LIMIT / 1024 / 1024).toFixed(0);
-    throw new Error(`PDF file (${(fileSize / 1024 / 1024).toFixed(1)} MB) exceeds Gemini's ${limitMB} MB processing limit.`);
-  }
-
-  const model = opts.model ?? (fileSize > PRO_MODEL_THRESHOLD ? 'gemini-2.5-pro' : 'gemini-2.5-flash');
-  const region = getRegion();
-  const projectId = getProjectId();
-
-  log('INFO', 'GEMINI_GENERATE', `Generating content with Vertex AI`, { model, gcsUri, region, projectId, hasResponseSchema: !!opts.responseSchema });
-
-  // T=0 by default — structured-JSON extraction tasks (the dominant use case
-  // here) want deterministic output. Callers that need narrative variation
-  // (e.g. synthesis) pass an explicit non-zero temperature via opts.
-  const generationConfig: Record<string, unknown> = {
+function buildGenerationConfig(opts: GenerateOptions): Record<string, unknown> {
+  // T=0 by default — structured-JSON extraction (the dominant use case here)
+  // wants deterministic output. Callers needing narrative variation pass a
+  // non-zero temperature via opts.
+  const cfg: Record<string, unknown> = {
     temperature: opts.temperature ?? 0,
     maxOutputTokens: opts.maxOutputTokens ?? 32768,
   };
   if (opts.responseSchema) {
-    generationConfig.responseMimeType = 'application/json';
-    generationConfig.responseSchema = opts.responseSchema;
+    cfg.responseMimeType = 'application/json';
+    cfg.responseSchema = opts.responseSchema;
   }
+  return cfg;
+}
 
-  const url = `https://${region}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${region}/publishers/google/models/${model}:generateContent`;
-  const requestBody = JSON.stringify({
-    contents: [{
-      role: 'user',
-      parts: [
-        { fileData: { mimeType: 'application/pdf', fileUri: gcsUri } },
-        { text: userPrompt }
-      ]
-    }],
-    systemInstruction: { parts: [{ text: systemPrompt }] },
-    generationConfig,
+/**
+ * One generateContent call against the standard Gemini API, with transient
+ * retry/backoff and a per-attempt timeout. Returns the model's text response.
+ */
+async function callGenerate(
+  model: string,
+  parts: GeminiPart[],
+  systemPrompt: string,
+  opts: GenerateOptions,
+  logTag: string,
+  maxAttempts: number,
+  perAttemptTimeoutMs: number,
+): Promise<string> {
+  const startTime = Date.now();
+  const key = getApiKey();
+
+  const body: Record<string, unknown> = {
+    contents: [{ role: 'user', parts }],
+    generationConfig: buildGenerationConfig(opts),
+  };
+  if (systemPrompt) body.systemInstruction = { parts: [{ text: systemPrompt }] };
+  const requestBody = JSON.stringify(body);
+  const url = `${API_BASE}/v1beta/${modelPath(model)}:generateContent`;
+
+  log('INFO', logTag, `Generating content via Gemini API`, {
+    model,
+    partCount: parts.length,
+    hasResponseSchema: !!opts.responseSchema,
   });
 
-  // The gs:// fileData path was previously a single, un-retried fetch — a
-  // transient connection reset / 5xx / 429 (common on a long inference over a
-  // big PDF) failed the whole document with no recovery, leaving it stuck.
-  // Retry transient failures with backoff, and bound each attempt with a
-  // timeout so a hung connection aborts and retries rather than stalling until
-  // the 400s worker wall-clock kills the invocation (which leaves no error).
-  const MAX_ATTEMPTS = 3;
-  // 150 s per attempt: dense scanned-medical PDFs (e.g. 25-page browser-split
-  // chunks) routinely need >90 s for a single Vertex inference, so a 90 s cap
-  // aborted them on every attempt and failed the doc. 150 s still leaves room
-  // inside the 400 s worker wall-clock (only Pass 0/Pass 1 send the full PDF
-  // here; later passes are text-only).
-  const PER_ATTEMPT_TIMEOUT_MS = 150_000;
   let lastError: Error | null = null;
-
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), PER_ATTEMPT_TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), perAttemptTimeoutMs);
     let response: Response;
     try {
       response = await fetch(url, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: { 'x-goog-api-key': key, 'Content-Type': 'application/json' },
         body: requestBody,
         signal: controller.signal,
       });
     } catch (netErr) {
-      // Connection reset / DNS / abort(timeout) — all transient. Retry.
       lastError = netErr instanceof Error ? netErr : new Error(String(netErr));
       const timedOut = lastError.name === 'AbortError';
-      log('WARN', 'GEMINI_GENERATE', `Network error attempt ${attempt}/${MAX_ATTEMPTS}${timedOut ? ' (timeout)' : ''}: ${lastError.message}${attempt < MAX_ATTEMPTS ? ' — retrying' : ''}`);
-      if (attempt < MAX_ATTEMPTS) { await new Promise(r => setTimeout(r, 3000 * attempt)); continue; }
-      throw new Error(`Vertex AI request failed after ${MAX_ATTEMPTS} attempts: ${lastError.message}`);
+      log('WARN', logTag, `Network error attempt ${attempt}/${maxAttempts}${timedOut ? ' (timeout)' : ''}: ${lastError.message}${attempt < maxAttempts ? ' — retrying' : ''}`);
+      if (attempt < maxAttempts) { await sleep(3000 * attempt); continue; }
+      throw new Error(`Gemini request failed after ${maxAttempts} attempts: ${lastError.message}`);
     } finally {
       clearTimeout(timer);
     }
@@ -170,52 +221,67 @@ export async function generateWithVertexFile(
       const errorText = await response.text();
       if (response.status === 400 && errorText.includes('INVALID_ARGUMENT')) {
         // Permanent — the document/request itself is rejected. Don't retry.
-        throw new Error(`Vertex AI rejected the document: ${errorText.substring(0, 300)}`);
+        throw new Error(`Gemini rejected the request: ${errorText.substring(0, 300)}`);
       }
-      if ((response.status === 429 || response.status >= 500) && attempt < MAX_ATTEMPTS) {
-        log('WARN', 'GEMINI_GENERATE', `Transient ${response.status} attempt ${attempt}/${MAX_ATTEMPTS} — retrying`);
-        lastError = new Error(`Vertex AI ${response.status}: ${errorText.substring(0, 200)}`);
-        await new Promise(r => setTimeout(r, 3000 * attempt));
+      if ((response.status === 429 || response.status >= 500) && attempt < maxAttempts) {
+        log('WARN', logTag, `Transient ${response.status} attempt ${attempt}/${maxAttempts} — retrying`);
+        lastError = new Error(`Gemini ${response.status}: ${errorText.substring(0, 200)}`);
+        await sleep(3000 * attempt);
         continue;
       }
-      throw new Error(`Vertex AI ${response.status}: ${errorText.substring(0, 500)}`);
+      throw new Error(`Gemini ${response.status}: ${errorText.substring(0, 500)}`);
     }
 
     const result = await response.json();
-    if (result.error) throw new Error(`Vertex AI error: ${result.error.message}`);
+    if (result.error) throw new Error(`Gemini error: ${result.error.message}`);
     if (!result.candidates || result.candidates.length === 0) {
       const blockReason = result.promptFeedback?.blockReason || 'Unknown';
-      throw new Error(`Vertex AI returned no results. Block reason: ${blockReason}.`);
+      throw new Error(`Gemini returned no results. Block reason: ${blockReason}.`);
     }
     const candidate = result.candidates[0];
     if (candidate.finishReason === 'SAFETY') {
       throw new Error('Response blocked by safety filters.');
     }
-    const textContent = candidate.content?.parts?.[0]?.text;
+    const textContent = candidate.content?.parts?.map((p: { text?: string }) => p.text || '').join('') || '';
     if (!textContent) {
-      throw new Error(`Vertex AI returned no text content. Finish reason: ${candidate.finishReason || 'unknown'}`);
+      throw new Error(`Gemini returned no text content. Finish reason: ${candidate.finishReason || 'unknown'}`);
     }
 
-    logTiming('GEMINI_GENERATE', 'API call', startTime);
-    log('INFO', 'GEMINI_GENERATE', `✅ Content generated`, { responseLength: textContent.length, attempts: attempt });
+    logTiming(logTag, 'API call', startTime);
+    log('INFO', logTag, `✅ Content generated`, { responseLength: textContent.length, attempts: attempt });
     return textContent;
   }
 
-  throw lastError ?? new Error('Vertex AI generation failed');
+  throw lastError ?? new Error('Gemini generation failed');
 }
 
-// Gemini contents-API "parts" shape. Inline data is base64-encoded bytes
-// (PDF or image); fileData uses a gs:// URI; text is plain text.
-export type GeminiPart =
-  | { text: string }
-  | { inlineData: { mimeType: string; data: string } }
-  | { fileData: { mimeType: string; fileUri: string } };
+/**
+ * Generate content from a Files-API PDF (the large-PDF path). Mirrors the old
+ * Vertex gs:// path: pick pro for big files unless overridden, 3 attempts with
+ * a generous per-attempt timeout (dense scanned medical PDFs are slow).
+ */
+export async function generateWithGeminiFile(
+  fileUri: string,
+  systemPrompt: string,
+  userPrompt: string,
+  fileSize: number,
+  opts: GenerateOptions = {},
+): Promise<string> {
+  if (fileSize > GEMINI_PDF_INFERENCE_LIMIT) {
+    const limitMB = (GEMINI_PDF_INFERENCE_LIMIT / 1024 / 1024).toFixed(0);
+    throw new Error(`PDF file (${(fileSize / 1024 / 1024).toFixed(1)} MB) exceeds Gemini's ${limitMB} MB processing limit.`);
+  }
+  const model = opts.model ?? (fileSize > PRO_MODEL_THRESHOLD ? 'gemini-2.5-pro' : 'gemini-2.5-flash');
+  const parts: GeminiPart[] = [
+    { fileData: { mimeType: 'application/pdf', fileUri } },
+    { text: userPrompt },
+  ];
+  return callGenerate(model, parts, systemPrompt, opts, 'GEMINI_GENERATE', 3, 150_000);
+}
 
 /**
- * Generate content with Vertex AI for inline (non-fileData) inputs.
- * Used by the small-PDF, image-vision, and text-fallback branches of
- * performAnalysis — anywhere we don't go through the gs:// fileData path.
- * Returns the model's text response, retrying transient 5xx / 429 errors.
+ * Generate content for inline (non-fileData) inputs: small-PDF base64,
+ * image-vision, and text-only. 5 attempts; standard per-attempt timeout.
  */
 export async function generateWithInlineContent(
   parts: GeminiPart[],
@@ -223,82 +289,7 @@ export async function generateWithInlineContent(
   model: string,
   opts: GenerateOptions = {},
 ): Promise<string> {
-  const startTime = Date.now();
-  const token = await getAccessToken();
-  const region = getRegion();
-  const projectId = getProjectId();
-
-  log('INFO', 'GEMINI_INLINE', `Generating content via Vertex AI`, { model, region, projectId, partCount: parts.length, hasResponseSchema: !!opts.responseSchema });
-
-  // T=0 by default — structured-JSON extraction tasks (the dominant use case
-  // here) want deterministic output. Callers that need narrative variation
-  // (e.g. synthesis) pass an explicit non-zero temperature via opts.
-  const generationConfig: Record<string, unknown> = {
-    temperature: opts.temperature ?? 0,
-    maxOutputTokens: opts.maxOutputTokens ?? 32768,
-  };
-  if (opts.responseSchema) {
-    generationConfig.responseMimeType = 'application/json';
-    generationConfig.responseSchema = opts.responseSchema;
-  }
-
-  const body = {
-    contents: [{ role: 'user', parts }],
-    systemInstruction: { parts: [{ text: systemPrompt }] },
-    generationConfig,
-  };
-
-  const maxAttempts = 5;
-  let lastError: Error | null = null;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const response = await fetch(
-      `https://${region}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${region}/publishers/google/models/${model}:generateContent`,
-      {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      },
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      if (response.status === 429) {
-        lastError = new Error('Rate limit exceeded.');
-      } else if (response.status === 400 && errorText.includes('INVALID_ARGUMENT')) {
-        throw new Error(`Vertex AI rejected the request: ${errorText.substring(0, 300)}`);
-      } else if (response.status >= 500 && attempt < maxAttempts) {
-        log('WARN', 'GEMINI_INLINE', `Transient ${response.status} on attempt ${attempt} — retrying`);
-        await new Promise(r => setTimeout(r, 2000 * attempt));
-        continue;
-      } else {
-        throw new Error(`Vertex AI ${response.status}: ${errorText.substring(0, 300)}`);
-      }
-      if (attempt === maxAttempts) throw lastError;
-      await new Promise(r => setTimeout(r, 2000 * attempt));
-      continue;
-    }
-
-    const result = await response.json();
-    if (result.error) throw new Error(`Vertex AI error: ${result.error.message}`);
-    if (!result.candidates || result.candidates.length === 0) {
-      const blockReason = result.promptFeedback?.blockReason || 'Unknown';
-      throw new Error(`Vertex AI returned no results. Block reason: ${blockReason}.`);
-    }
-    const candidate = result.candidates[0];
-    if (candidate.finishReason === 'SAFETY') {
-      throw new Error('Response blocked by safety filters.');
-    }
-    const textContent = candidate.content?.parts?.[0]?.text;
-    if (!textContent) {
-      throw new Error(`Vertex AI returned no text content. Finish reason: ${candidate.finishReason || 'unknown'}`);
-    }
-    logTiming('GEMINI_INLINE', 'API call', startTime);
-    log('INFO', 'GEMINI_INLINE', `✅ Content generated`, { responseLength: textContent.length });
-    return textContent;
-  }
-
-  throw lastError ?? new Error('Vertex AI inline generation failed');
+  return callGenerate(model, parts, systemPrompt, opts, 'GEMINI_INLINE', 5, 120_000);
 }
 
 // =====================================================================
@@ -380,18 +371,16 @@ Return STRICTLY the JSON shape requested.`;
 const CLASSIFIER_USER_PROMPT = `Classify this PDF. Return the list of {type, pageStart, pageEnd, confidence} entries that partition the document.`;
 
 /**
- * Run the Pass 0 classifier. Routes through the same gs:// vs inline path as
- * Pass 1 (GCS for >5 MB), always uses gemini-2.5-flash for cost reasons.
- *
- * Use `classifyDocumentFromGcs` when the PDF is already in GCS for analyze;
- * use `classifyDocumentInline` for ≤5 MB PDFs / smoke tests.
+ * Run the Pass 0 classifier on a Files-API PDF. Always uses gemini-2.5-flash
+ * for cost. Use `classifyDocumentFromFile` when the PDF is already uploaded for
+ * analyze; use `classifyDocumentInline` for ≤ inline-threshold PDFs / smoke tests.
  */
-export async function classifyDocumentFromGcs(
-  gcsUri: string,
+export async function classifyDocumentFromFile(
+  fileUri: string,
   fileSize: number,
 ): Promise<ClassificationEntry[]> {
-  const raw = await generateWithVertexFile(
-    gcsUri,
+  const raw = await generateWithGeminiFile(
+    fileUri,
     CLASSIFIER_SYSTEM_PROMPT,
     CLASSIFIER_USER_PROMPT,
     fileSize,

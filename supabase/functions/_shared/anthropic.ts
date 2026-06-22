@@ -1,16 +1,16 @@
-// Anthropic client for the Azure AI Foundry Anthropic Messages proxy.
+// Anthropic client for the standard Anthropic Messages API (api.anthropic.com).
 //
-// The client is on Azure but routes Claude through the Anthropic Messages
-// API surface. Auth scheme is Bearer (NOT the Azure subscription-key
-// `api-key:` header) — verified 2026-05-16 against the eastus2 deployment.
-// Endpoint and key live in Supabase secrets AZURE_ANTHROPIC_BASE and
-// AZURE_ANTHROPIC_API_KEY (see project memory reference_azure_anthropic.md).
+// Auth is the normal Anthropic API key (ANTHROPIC_API_KEY) sent as the
+// `x-api-key` header (NOT Bearer) plus the `anthropic-version` header. The base
+// URL defaults to https://api.anthropic.com and can be overridden with
+// ANTHROPIC_BASE if needed.
 //
 // This module is non-streaming on purpose: grounding evaluation depends on
 // forced tool use to return structured JSON, which needs the full response.
 
 import { log } from './utils.ts';
 
+const DEFAULT_BASE = 'https://api.anthropic.com';
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
 const ANTHROPIC_VERSION = '2023-06-01';
 
@@ -61,10 +61,9 @@ export interface AnthropicResponse {
 }
 
 function getConfig(): { base: string; key: string } {
-  const base = Deno.env.get('AZURE_ANTHROPIC_BASE');
-  const key = Deno.env.get('AZURE_ANTHROPIC_API_KEY');
-  if (!base) throw new Error('AZURE_ANTHROPIC_BASE is not configured');
-  if (!key) throw new Error('AZURE_ANTHROPIC_API_KEY is not configured');
+  const base = Deno.env.get('ANTHROPIC_BASE') || DEFAULT_BASE;
+  const key = Deno.env.get('ANTHROPIC_API_KEY');
+  if (!key) throw new Error('ANTHROPIC_API_KEY is not configured');
   return { base: base.replace(/\/+$/, ''), key };
 }
 
@@ -116,7 +115,7 @@ export async function callAnthropic(
     const response = await fetch(`${base}/v1/messages`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${key}`,
+        'x-api-key': key,
         'anthropic-version': ANTHROPIC_VERSION,
         'Content-Type': 'application/json',
       },
@@ -139,7 +138,7 @@ export async function callAnthropic(
     }
 
     const errorText = await response.text();
-    const errorMsg = `Azure Anthropic ${response.status}: ${errorText.substring(0, 300)}`;
+    const errorMsg = `Anthropic ${response.status}: ${errorText.substring(0, 300)}`;
     lastError = new Error(errorMsg);
 
     if (!RETRYABLE_STATUSES.has(response.status) || attempt === MAX_RETRIES) {
@@ -157,7 +156,7 @@ export async function callAnthropic(
   }
 
   // Defensive — loop above always returns or throws on the final iteration.
-  throw lastError ?? new Error('Azure Anthropic call failed with no recorded error');
+  throw lastError ?? new Error('Anthropic call failed with no recorded error');
 }
 
 // =====================================================================

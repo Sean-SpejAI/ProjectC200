@@ -12,7 +12,7 @@ import {
   getNestedValue
 } from './extraction-schema.ts';
 import { ExtractedTextStructure } from './text-extraction.ts';
-import { getAccessToken, getProjectId, getRegion } from './vertex-auth.ts';
+import { generateWithInlineContent } from './gemini.ts';
 
 /**
  * Perform gap-fill extraction for missing or low-quality fields
@@ -257,8 +257,9 @@ function getExtractionDirective(field: FieldDefinition): string {
 }
 
 /**
- * Call Gemini via Vertex AI to extract a specific field.
- * Same service account auth used by analyze-claim-document Pass 1.
+ * Call Gemini to extract a specific field. Text-only, deterministic (T=0).
+ * Uses the shared generativelanguage client (GEMINI_API_KEY) — same auth as
+ * analyze-claim-document Pass 1.
  */
 async function callAIForField(
   field: FieldDefinition,
@@ -266,38 +267,16 @@ async function callAIForField(
   _extractedText: ExtractedTextStructure
 ): Promise<any> {
   try {
-    const token = await getAccessToken();
-    const projectId = getProjectId();
-    const region = getRegion();
-    const model = 'gemini-2.5-flash';
-
-    const response = await fetch(
-      `https://${region}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${region}/publishers/google/models/${model}:generateContent`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          // T=0 — gap-fill is structured field extraction; determinism wins.
-          generationConfig: { temperature: 0, maxOutputTokens: 8192 },
-        }),
-      },
+    // T=0 — gap-fill is structured field extraction; determinism wins.
+    const content = await generateWithInlineContent(
+      [{ text: prompt }],
+      '',
+      'gemini-2.5-flash',
+      { temperature: 0, maxOutputTokens: 8192 },
     );
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      log('ERROR', 'GAP_FILL', `Vertex AI error: ${response.status} - ${errorText.substring(0, 200)}`);
-      return null;
-    }
-
-    const result = await response.json();
-    const content = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
     if (!content) {
-      log('WARN', 'GAP_FILL', `Empty response from Vertex AI (finishReason=${result.candidates?.[0]?.finishReason ?? 'unknown'})`);
+      log('WARN', 'GAP_FILL', `Empty response from Gemini`);
       return null;
     }
 
