@@ -84,6 +84,44 @@ const EMPTY_NEW_USER: NewUserDraft = {
   initialRole: "",
 };
 
+// Demo "Reset Environment" status shape (from the admin-reset-environment
+// edge function's "status" action).
+interface ResetEnvCounts {
+  claims: number;
+  documents: number;
+  storage_objects: number;
+}
+interface ResetEnvStatus {
+  current: ResetEnvCounts;
+  baseline:
+    | (ResetEnvCounts & { id: string; captured_at: string; note: string | null })
+    | null;
+}
+
+// supabase-js v2 hides non-2xx Edge Function response bodies inside
+// FunctionsHttpError. Reach into error.context.response to recover the message
+// the function actually returned (same trick used by the password reset flow).
+async function edgeErrorMessage(
+  data: unknown,
+  error: unknown,
+  fallback: string,
+): Promise<string> {
+  const d = data as { message?: string; error?: string } | null | undefined;
+  const e = error as { message?: string; context?: { response?: Response } } | null | undefined;
+  let detail = d?.message || d?.error || e?.message || fallback;
+  const ctxResp = e?.context?.response;
+  if (ctxResp) {
+    try {
+      const body = await ctxResp.clone().json();
+      if (body?.message) detail = body.message;
+      else if (body?.error) detail = body.error;
+    } catch {
+      /* keep fallback */
+    }
+  }
+  return detail;
+}
+
 export default function Admin() {
   const { canManageUsers, loading: roleLoading } = useUserRole();
   const { user: currentUser } = useAuth();
@@ -106,6 +144,15 @@ export default function Admin() {
   const [newPassword, setNewPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isSettingPassword, setIsSettingPassword] = useState(false);
+  // Demo "Reset Environment" state.
+  const [resetEnv, setResetEnv] = useState<ResetEnvStatus | null>(null);
+  const [resetEnvLoading, setResetEnvLoading] = useState(true);
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState("");
+  const [isResetting, setIsResetting] = useState(false);
+  const [captureOpen, setCaptureOpen] = useState(false);
+  const [captureNote, setCaptureNote] = useState("");
+  const [isCapturing, setIsCapturing] = useState(false);
 
   useEffect(() => {
     if (!roleLoading && !canManageUsers()) {
@@ -116,6 +163,7 @@ export default function Admin() {
 
   useEffect(() => {
     fetchUsers();
+    fetchResetEnvStatus();
   }, []);
 
   const fetchUsers = async () => {
@@ -325,6 +373,67 @@ export default function Admin() {
     if (!generatedCodes) return;
     await navigator.clipboard.writeText(generatedCodes.codes.join("\n"));
     toast.success("Codes copied to clipboard");
+  };
+
+  // --- Demo "Reset Environment" handlers ---
+  const fetchResetEnvStatus = async () => {
+    setResetEnvLoading(true);
+    const { data, error } = await supabase.functions.invoke("admin-reset-environment", {
+      body: { action: "status" },
+    });
+    if (error || !data?.success) {
+      setResetEnv(null);
+    } else {
+      setResetEnv(data.status as ResetEnvStatus);
+    }
+    setResetEnvLoading(false);
+  };
+
+  const executeReset = async () => {
+    setIsResetting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-reset-environment", {
+        body: { action: "reset" },
+      });
+      if (error || !data?.success) {
+        throw new Error(await edgeErrorMessage(data, error, "Reset failed"));
+      }
+      toast.success(
+        `Environment reset to baseline — restored ${data.claims_restored} claims / ` +
+          `${data.documents_restored} documents, removed ${data.files_removed} demo file(s).`,
+      );
+      setResetConfirmOpen(false);
+      setResetConfirmText("");
+      await fetchResetEnvStatus();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Reset failed");
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
+  const executeCapture = async () => {
+    setIsCapturing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-reset-environment", {
+        body: { action: "capture", note: captureNote.trim() || undefined },
+      });
+      if (error || !data?.success) {
+        throw new Error(await edgeErrorMessage(data, error, "Capture failed"));
+      }
+      const c = data.captured;
+      toast.success(
+        `New baseline captured — ${c.claims} claims / ${c.documents} documents / ` +
+          `${c.storage_objects} files. This is now the reset target.`,
+      );
+      setCaptureOpen(false);
+      setCaptureNote("");
+      await fetchResetEnvStatus();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Capture failed");
+    } finally {
+      setIsCapturing(false);
+    }
   };
 
   const getRoleBadgeVariant = (role: AppRole) => {
@@ -596,6 +705,149 @@ export default function Admin() {
                   ))}
                 </TableBody>
               </Table>
+            </Card>
+
+            {/* Demo Environment — reset the demo to its clean baseline between
+                sessions. Removes anything uploaded during a demo (e.g. a demand
+                packet) and reverts edits to the pre-loaded claims. */}
+            <Card className="mt-8 bg-surface-container-lowest border-outline-variant shadow-elevation-1 rounded-2xl overflow-hidden">
+              <div className="p-6 space-y-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-secondary-container text-on-secondary-container flex items-center justify-center shrink-0">
+                      <Icon name="restart_alt" size={20} filled />
+                    </div>
+                    <div>
+                      <h2 className="text-title-md font-semibold text-on-surface">Demo Environment</h2>
+                      <p className="text-body-md text-on-surface-variant">
+                        Restore the demo to its clean baseline between sessions — clears anything
+                        uploaded during a demo and reverts edits to the pre-loaded claims.
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={fetchResetEnvStatus}
+                    title="Refresh status"
+                    disabled={resetEnvLoading}
+                    className="shrink-0 text-on-surface-variant"
+                  >
+                    <Icon name="refresh" size={18} className={resetEnvLoading ? "animate-spin" : ""} />
+                  </Button>
+                </div>
+
+                {resetEnvLoading && !resetEnv ? (
+                  <div className="flex items-center gap-2 text-on-surface-variant text-body-md">
+                    <Icon name="progress_activity" size={18} className="animate-spin" />
+                    Loading environment status…
+                  </div>
+                ) : !resetEnv ? (
+                  <div className="text-body-md text-destructive">
+                    Couldn't load environment status. Try refreshing.
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-3 gap-3">
+                      {[
+                        { label: "Claims", cur: resetEnv.current.claims, base: resetEnv.baseline?.claims },
+                        { label: "Documents", cur: resetEnv.current.documents, base: resetEnv.baseline?.documents },
+                        { label: "Files", cur: resetEnv.current.storage_objects, base: resetEnv.baseline?.storage_objects },
+                      ].map((s) => {
+                        const delta = s.base != null ? s.cur - s.base : null;
+                        return (
+                          <div
+                            key={s.label}
+                            className="rounded-xl bg-surface-container-low border border-outline-variant p-4"
+                          >
+                            <p className="text-label-md uppercase tracking-widest text-on-surface-variant">
+                              {s.label}
+                            </p>
+                            <p className="text-headline-sm text-on-surface mt-1">{s.cur}</p>
+                            {s.base != null && (
+                              <p className="text-[11px] text-on-surface-variant mt-0.5">
+                                baseline {s.base}
+                                {delta !== 0 && (
+                                  <span className="text-warning ml-1 font-semibold">
+                                    ({delta! > 0 ? "+" : ""}
+                                    {delta})
+                                  </span>
+                                )}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {resetEnv.baseline ? (
+                      (() => {
+                        const dirty =
+                          resetEnv.current.claims !== resetEnv.baseline.claims ||
+                          resetEnv.current.documents !== resetEnv.baseline.documents ||
+                          resetEnv.current.storage_objects !== resetEnv.baseline.storage_objects;
+                        return (
+                          <div
+                            className={`rounded-xl p-3 border ${
+                              dirty
+                                ? "bg-warning/10 border-warning/30"
+                                : "bg-success/10 border-success/30"
+                            }`}
+                          >
+                            <div
+                              className={`flex items-center gap-2 text-body-md font-medium ${
+                                dirty ? "text-warning" : "text-success"
+                              }`}
+                            >
+                              <Icon name={dirty ? "warning" : "check_circle"} size={16} filled />
+                              {dirty
+                                ? "Demo-session changes detected — Reset will clear them."
+                                : "Environment matches the baseline."}
+                            </div>
+                            <p className="text-[11px] text-on-surface-variant mt-1">
+                              Baseline captured{" "}
+                              {new Date(resetEnv.baseline.captured_at).toLocaleString()}
+                              {resetEnv.baseline.note ? ` — ${resetEnv.baseline.note}` : ""}
+                            </p>
+                          </div>
+                        );
+                      })()
+                    ) : (
+                      <div className="rounded-xl p-3 border bg-warning/10 border-warning/30 text-warning flex items-center gap-2 text-body-md font-medium">
+                        <Icon name="warning" size={16} filled />
+                        No baseline captured yet — capture one to enable Reset.
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between gap-3 pt-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-2"
+                        onClick={() => {
+                          setCaptureNote("");
+                          setCaptureOpen(true);
+                        }}
+                      >
+                        <Icon name="bookmark_add" size={16} />
+                        Capture current as baseline
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="gap-2 bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        disabled={!resetEnv.baseline}
+                        onClick={() => {
+                          setResetConfirmText("");
+                          setResetConfirmOpen(true);
+                        }}
+                      >
+                        <Icon name="restart_alt" size={16} />
+                        Reset to baseline
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
             </Card>
           </div>
         </div>
@@ -976,6 +1228,134 @@ export default function Admin() {
               Copy all
             </Button>
             <Button onClick={() => setGeneratedCodes(null)}>I have these codes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reset Environment confirmation — destructive; type RESET to enable. */}
+      <AlertDialog
+        open={resetConfirmOpen}
+        onOpenChange={(open) => {
+          if (!open && !isResetting) {
+            setResetConfirmOpen(false);
+            setResetConfirmText("");
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reset demo environment?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  This restores the captured baseline. Any claims, documents, or files added during a
+                  demo (including an uploaded demand packet) are{" "}
+                  <strong>permanently removed</strong>, and edits to the pre-loaded claims are reverted.
+                </p>
+                {resetEnv?.baseline && (
+                  <p className="text-xs text-on-surface-variant">
+                    Restores to {resetEnv.baseline.claims} claims / {resetEnv.baseline.documents}{" "}
+                    documents / {resetEnv.baseline.storage_objects} files (captured{" "}
+                    {new Date(resetEnv.baseline.captured_at).toLocaleString()}).
+                  </p>
+                )}
+                <div className="space-y-1.5">
+                  <label className="text-xs text-on-surface-variant">
+                    Type <strong>RESET</strong> to confirm:
+                  </label>
+                  <Input
+                    value={resetConfirmText}
+                    onChange={(e) => setResetConfirmText(e.target.value)}
+                    placeholder="RESET"
+                    autoFocus
+                  />
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isResetting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                executeReset();
+              }}
+              disabled={isResetting || resetConfirmText !== "RESET"}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isResetting ? (
+                <>
+                  <Icon name="progress_activity" size={14} className="mr-2 animate-spin" />
+                  Resetting…
+                </>
+              ) : (
+                <>
+                  <Icon name="restart_alt" size={14} className="mr-2" />
+                  Reset to baseline
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Capture baseline dialog — overwrites the reset target with the CURRENT
+          state. Use after intentionally changing the pre-loaded data. */}
+      <Dialog
+        open={captureOpen}
+        onOpenChange={(open) => {
+          if (!open && !isCapturing) {
+            setCaptureOpen(false);
+            setCaptureNote("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Capture current as baseline</DialogTitle>
+            <DialogDescription>
+              Snapshots the environment exactly as it is now and makes it the new reset target. Use
+              this after intentionally changing the pre-loaded data (e.g. replacing the source
+              documents). The current {resetEnv?.current.claims ?? "?"} claims /{" "}
+              {resetEnv?.current.documents ?? "?"} documents /{" "}
+              {resetEnv?.current.storage_objects ?? "?"} files will become the state that Reset
+              restores to.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <label className="text-xs text-on-surface-variant">Note (optional)</label>
+            <Input
+              value={captureNote}
+              onChange={(e) => setCaptureNote(e.target.value)}
+              placeholder="e.g. post-rebrand demo baseline"
+              disabled={isCapturing}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={isCapturing}
+              onClick={() => {
+                setCaptureOpen(false);
+                setCaptureNote("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={executeCapture} disabled={isCapturing}>
+              {isCapturing ? (
+                <>
+                  <Icon name="progress_activity" size={14} className="mr-2 animate-spin" />
+                  Capturing…
+                </>
+              ) : (
+                <>
+                  <Icon name="bookmark_add" size={14} className="mr-2" />
+                  Capture baseline
+                </>
+              )}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
